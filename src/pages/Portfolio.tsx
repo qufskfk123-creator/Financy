@@ -98,9 +98,10 @@ interface PriceCellProps {
   loading:   boolean
   error:     string | null
   onSave:    (ticker: string, price: number) => void
+  alwaysShowEdit?: boolean
 }
 
-function PriceCell({ ticker, currency, priceData, loading, error, onSave }: PriceCellProps) {
+function PriceCell({ ticker, currency, priceData, loading, error, onSave, alwaysShowEdit }: PriceCellProps) {
   const [editing,    setEditing]    = useState(false)
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -220,13 +221,13 @@ function PriceCell({ ticker, currency, priceData, loading, error, onSave }: Pric
       {/* 캐시 상태 점 */}
       <StatusDot status={status} updatedAt={priceData.updatedAt} source={priceData.source} />
 
-      {/* 편집 버튼 (hover 시 표시) */}
+      {/* 편집 버튼 — 모바일에서 항상 표시, 데스크톱은 hover */}
       <button
         onClick={startEdit}
         title="수동으로 현재가 입력"
-        className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded-md hover:bg-gray-700
+        className={`w-5 h-5 rounded-md hover:bg-gray-700
                    flex items-center justify-center text-gray-500 hover:text-gray-300
-                   transition-all duration-150"
+                   transition-all duration-150 ${alwaysShowEdit ? 'opacity-60' : 'opacity-0 group-hover:opacity-100'}`}
       >
         <Pencil className="w-3 h-3" />
       </button>
@@ -262,9 +263,9 @@ export default function Portfolio() {
 
   // ── 단일 티커 수동 저장 ──
   const handleManualSave = useCallback((ticker: string, price: number) => {
-    const pos     = positions.find((p) => p.ticker === ticker)
+    const pos      = positions.find((p) => p.ticker === ticker)
     const currency = pos?.currency ?? 'KRW'
-    const data    = setManualPrice(ticker, price, currency)
+    const data     = setManualPrice(ticker, price, currency)
     setPrices((prev) => ({
       ...prev,
       [ticker]: { data, loading: false, error: null },
@@ -275,7 +276,6 @@ export default function Portfolio() {
   const handleRefreshAll = useCallback(async () => {
     setRefreshing(true)
 
-    // 로딩 상태 진입
     setPrices((prev) => {
       const next = { ...prev }
       positions.forEach((p) => {
@@ -288,7 +288,6 @@ export default function Portfolio() {
       positions.map((p) => ({ ticker: p.ticker, exchange: p.exchange })),
     )
 
-    // 결과 반영
     setPrices((prev) => {
       const next = { ...prev }
       results.forEach((r) => {
@@ -332,10 +331,10 @@ export default function Portfolio() {
   // ──────────────────────────────────────────
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-4 md:space-y-6">
 
       {/* ── 헤더 ── */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-white">포트폴리오</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -345,9 +344,9 @@ export default function Portfolio() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* 범례 */}
-          <div className="flex items-center gap-3 text-xs text-gray-500 mr-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 범례 — 모바일에서 숨김 */}
+          <div className="hidden sm:flex items-center gap-3 text-xs text-gray-500 mr-2">
             {[
               ['bg-emerald-400', 'API'],
               ['bg-amber-400',   '오래됨'],
@@ -377,16 +376,15 @@ export default function Portfolio() {
         <div className="flex items-start gap-3 px-4 py-3 bg-brand-600/10 border border-brand-600/20 rounded-xl">
           <Info className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-brand-300/80 leading-relaxed">
-            <span className="font-medium text-brand-300">실시간 시세 사용 방법: </span>
-            <code className="text-xs bg-brand-600/20 px-1 py-0.5 rounded">vercel dev</code> 로 개발 서버를 실행하면{' '}
-            <code className="text-xs bg-brand-600/20 px-1 py-0.5 rounded">/api/quote</code> 서버리스 함수가 활성화됩니다.
-            또는 각 종목의 현재가를 <span className="font-medium">직접 입력</span>하세요.
+            <span className="font-medium text-brand-300">실시간 시세: </span>
+            <code className="text-xs bg-brand-600/20 px-1 py-0.5 rounded">vercel dev</code> 실행 후 사용 가능합니다.
+            또는 현재가를 <span className="font-medium">직접 입력</span>하세요.
           </div>
         </div>
       )}
 
-      {/* ── 요약 카드 ── */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* ── 요약 카드 — 모바일 1열 / sm 이상 2열 ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <SummaryCard
           title="국내 종목 (KRW)"
           totalCost={krw.totalCost}
@@ -407,17 +405,17 @@ export default function Portfolio() {
         />
       </div>
 
-      {/* ── 포지션 테이블 ── */}
+      {/* ── 포지션 테이블 (데스크톱) / 카드 (모바일) ── */}
       <div className="card !p-0 overflow-hidden">
-        {/* 테이블 헤더 */}
-        <div className="grid grid-cols-[2fr_1fr_1.2fr_1.6fr_1.2fr_1fr] gap-4 px-5 py-3
+
+        {/* ── 데스크톱 테이블 헤더 (md 이상) ── */}
+        <div className="hidden md:grid grid-cols-[2fr_1fr_1.2fr_1.6fr_1.2fr_1fr] gap-4 px-5 py-3
                         border-b border-gray-800 bg-gray-900/80">
           {['종목', '수량', '평균단가', '현재가', '평가금액', '수익률'].map((h) => (
             <p key={h} className="stat-label">{h}</p>
           ))}
         </div>
 
-        {/* 포지션 행 */}
         {positions.map((pos) => {
           const ps      = prices[pos.ticker] ?? { data: null, loading: false, error: null }
           const current = ps.data?.price ?? null
@@ -428,91 +426,131 @@ export default function Portfolio() {
           const isProfit  = pl >= 0
 
           return (
-            <div
-              key={pos.ticker}
-              className={`grid grid-cols-[2fr_1fr_1.2fr_1.6fr_1.2fr_1fr] gap-4 px-5 py-4
-                          border-b border-gray-800/60 last:border-0 transition-colors duration-150
-                          hover:bg-gray-800/40 ${
-                            hasPrice ? (isProfit ? 'hover:bg-emerald-950/20' : 'hover:bg-red-950/20') : ''
-                          }`}
-            >
-              {/* 종목 */}
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-gray-800 flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-gray-300">
-                    {pos.ticker.slice(0, 2)}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-100 leading-tight">{pos.name}</p>
-                  <p className="text-xs text-gray-500 font-mono">{pos.ticker} · {pos.exchange}</p>
-                </div>
-              </div>
+            <div key={pos.ticker} className={`border-b border-gray-800/60 last:border-0 transition-colors duration-150 ${
+              hasPrice ? (isProfit ? 'hover:bg-emerald-950/20' : 'hover:bg-red-950/20') : 'hover:bg-gray-800/40'
+            }`}>
 
-              {/* 수량 */}
-              <div className="flex items-center">
-                <span className="text-sm text-gray-300 font-mono">{pos.quantity.toLocaleString()}</span>
-              </div>
-
-              {/* 평균단가 */}
-              <div className="flex items-center">
-                <span className="text-sm text-gray-400 font-mono">
-                  {fmtPrice(pos.avgBuyPrice, pos.currency)}
-                </span>
-              </div>
-
-              {/* 현재가 (편집 가능) */}
-              <div className="flex items-center">
-                <PriceCell
-                  ticker={pos.ticker}
-                  currency={pos.currency}
-                  priceData={ps.data}
-                  loading={ps.loading}
-                  error={ps.error}
-                  onSave={handleManualSave}
-                />
-              </div>
-
-              {/* 평가금액 */}
-              <div className="flex items-center">
-                {hasPrice ? (
-                  <span className="text-sm text-gray-200 font-mono">
-                    {fmtPrice(currentValue, pos.currency)}
-                  </span>
-                ) : (
-                  <span className="text-sm text-gray-600">—</span>
-                )}
-              </div>
-
-              {/* 수익률 */}
-              <div className="flex items-center">
-                {hasPrice ? (
-                  <div className={`flex items-center gap-1 text-sm font-semibold ${
-                    isProfit ? 'text-emerald-400' : 'text-red-400'
-                  }`}>
-                    {isProfit
-                      ? <TrendingUp className="w-3.5 h-3.5" />
-                      : <TrendingDown className="w-3.5 h-3.5" />}
-                    <span>{fmtPct(plPct)}</span>
+              {/* ── 데스크톱 행 ── */}
+              <div className="hidden md:grid grid-cols-[2fr_1fr_1.2fr_1.6fr_1.2fr_1fr] gap-4 px-5 py-4">
+                {/* 종목 */}
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-gray-800 flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-bold text-gray-300">{pos.ticker.slice(0, 2)}</span>
                   </div>
-                ) : (
-                  <span className="text-sm text-gray-600">—</span>
-                )}
+                  <div>
+                    <p className="text-sm font-medium text-gray-100 leading-tight">{pos.name}</p>
+                    <p className="text-xs text-gray-500 font-mono">{pos.ticker} · {pos.exchange}</p>
+                  </div>
+                </div>
+                {/* 수량 */}
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-300 font-mono">{pos.quantity.toLocaleString()}</span>
+                </div>
+                {/* 평균단가 */}
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-400 font-mono">{fmtPrice(pos.avgBuyPrice, pos.currency)}</span>
+                </div>
+                {/* 현재가 */}
+                <div className="flex items-center">
+                  <PriceCell
+                    ticker={pos.ticker}
+                    currency={pos.currency}
+                    priceData={ps.data}
+                    loading={ps.loading}
+                    error={ps.error}
+                    onSave={handleManualSave}
+                  />
+                </div>
+                {/* 평가금액 */}
+                <div className="flex items-center">
+                  {hasPrice
+                    ? <span className="text-sm text-gray-200 font-mono">{fmtPrice(currentValue, pos.currency)}</span>
+                    : <span className="text-sm text-gray-600">—</span>}
+                </div>
+                {/* 수익률 */}
+                <div className="flex items-center">
+                  {hasPrice ? (
+                    <div className={`flex items-center gap-1 text-sm font-semibold ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {isProfit ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      <span>{fmtPct(plPct)}</span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-600">—</span>
+                  )}
+                </div>
               </div>
+
+              {/* ── 모바일 카드 ── */}
+              <div className="md:hidden px-4 py-3.5 space-y-3">
+                {/* 상단: 종목 정보 + 수익률 */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-gray-800 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-gray-300">{pos.ticker.slice(0, 2)}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-100 truncate">{pos.name}</p>
+                      <p className="text-xs text-gray-500 font-mono">{pos.ticker} · {pos.exchange}</p>
+                    </div>
+                  </div>
+                  {hasPrice ? (
+                    <div className={`flex flex-col items-end flex-shrink-0 text-sm font-bold ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <div className="flex items-center gap-0.5">
+                        {isProfit ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                        {fmtPct(plPct)}
+                      </div>
+                      <span className="text-xs font-medium text-gray-500">
+                        {pl >= 0 ? '+' : ''}{fmtPrice(pl, pos.currency)}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-600 flex-shrink-0">—</span>
+                  )}
+                </div>
+
+                {/* 하단: 수량/단가/현재가/평가금액 */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <div>
+                    <p className="text-xs text-gray-600 mb-0.5">수량</p>
+                    <p className="text-sm text-gray-300 font-mono">{pos.quantity.toLocaleString()}주</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 mb-0.5">평균단가</p>
+                    <p className="text-sm text-gray-400 font-mono">{fmtPrice(pos.avgBuyPrice, pos.currency)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 mb-0.5">현재가</p>
+                    <PriceCell
+                      ticker={pos.ticker}
+                      currency={pos.currency}
+                      priceData={ps.data}
+                      loading={ps.loading}
+                      error={ps.error}
+                      onSave={handleManualSave}
+                      alwaysShowEdit
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 mb-0.5">평가금액</p>
+                    {hasPrice
+                      ? <p className="text-sm text-gray-200 font-mono">{fmtPrice(currentValue, pos.currency)}</p>
+                      : <p className="text-sm text-gray-600">—</p>}
+                  </div>
+                </div>
+              </div>
+
             </div>
           )
         })}
       </div>
 
       {/* ── 통계 바 ── */}
-      <div className="flex items-center gap-6 px-1 text-xs text-gray-600">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-gray-600">
         <span>{positions.length}개 종목</span>
         {apiCount > 0    && <span className="text-emerald-600">API {apiCount}개</span>}
         {manualCount > 0 && <span className="text-blue-600">수동 {manualCount}개</span>}
         {noDataCount > 0 && <span className="text-gray-600">미입력 {noDataCount}개</span>}
-        <span className="ml-auto">
-          캐시 TTL: API 24시간 / 수동 무제한
-        </span>
+        <span className="sm:ml-auto">캐시 TTL: API 24시간 / 수동 무제한</span>
       </div>
 
     </div>
@@ -550,13 +588,13 @@ function SummaryCard({
       <div className="grid grid-cols-3 gap-3">
         <div>
           <p className="text-xs text-gray-600 mb-1">투자금액</p>
-          <p className="text-base font-semibold text-gray-200 font-mono">
+          <p className="text-sm md:text-base font-semibold text-gray-200 font-mono">
             {fmtPrice(totalCost, currency)}
           </p>
         </div>
         <div>
           <p className="text-xs text-gray-600 mb-1">평가금액</p>
-          <p className={`text-base font-semibold font-mono ${hasData ? 'text-gray-200' : 'text-gray-600'}`}>
+          <p className={`text-sm md:text-base font-semibold font-mono ${hasData ? 'text-gray-200' : 'text-gray-600'}`}>
             {hasData ? fmtPrice(totalValue!, currency) : '—'}
           </p>
         </div>
@@ -565,12 +603,10 @@ function SummaryCard({
           {hasData ? (
             <div className={`flex items-center gap-1 ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
               {isProfit ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              <span className="text-sm font-semibold font-mono">
-                {fmtPct(plPct)}
-              </span>
+              <span className="text-sm font-semibold font-mono">{fmtPct(plPct)}</span>
             </div>
           ) : (
-            <span className="text-base font-semibold text-gray-600">—</span>
+            <span className="text-sm md:text-base font-semibold text-gray-600">—</span>
           )}
         </div>
       </div>

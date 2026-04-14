@@ -12,7 +12,8 @@ export default function App() {
   return (
     <div className="flex h-screen bg-gray-950 overflow-hidden">
       <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
-      <main className="flex-1 overflow-y-auto">
+      {/* pb-16 md:pb-0 — 모바일 하단 탭바 높이만큼 여백 */}
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
         {currentPage === 'dashboard'  && <Dashboard onNavigate={setCurrentPage} />}
         {currentPage === 'record'     && <NewInvestment onNavigate={setCurrentPage} />}
         {currentPage === 'portfolio'  && <Portfolio />}

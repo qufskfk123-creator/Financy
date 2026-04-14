@@ -181,23 +181,25 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
   const maxCount        = Math.max(...VIOLATIONS.map((v) => v.count))
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-4 md:space-y-6">
 
       {/* ── 헤더 ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm text-gray-500">안녕하세요, 유태일님 👋</p>
-          <h1 className="text-2xl font-semibold text-white mt-0.5">자산 현황</h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-white mt-0.5">자산 현황</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* 매수 추가 버튼 — 모바일에서는 FAB이 있으므로 숨김 */}
           <button
             onClick={() => onNavigate('record')}
-            className="flex items-center gap-1.5 btn-primary text-sm"
+            className="hidden md:flex items-center gap-1.5 btn-primary text-sm"
           >
             <Plus className="w-3.5 h-3.5" />
             매수 추가
           </button>
-          <div className="relative">
+          {/* 검색 — 모바일에서 숨김 */}
+          <div className="relative hidden md:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               type="text"
@@ -216,28 +218,28 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
         </div>
       </div>
 
-      {/* ── 통계 카드 × 4 ── */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* ── 통계 카드 × 4 — 모바일 2열 / 데스크톱 4열 ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {STATS.map((s) => (
-          <div key={s.label} className="card">
-            <div className="flex items-start justify-between mb-3">
+          <div key={s.label} className="card !p-4 md:!p-6">
+            <div className="flex items-start justify-between mb-2 md:mb-3">
               <p className="stat-label">{s.label}</p>
               <div className={s.up ? 'badge-up' : 'badge-down'}>
                 {s.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                {s.change}
+                <span className="hidden sm:inline">{s.change}</span>
               </div>
             </div>
-            <p className="text-2xl font-semibold text-white mono">{s.value}</p>
+            <p className="text-lg md:text-2xl font-semibold text-white mono leading-tight">{s.value}</p>
             <p className="text-xs text-gray-600 mt-1">{s.sub}</p>
           </div>
         ))}
       </div>
 
       {/* ── 메인 그리드 Row 1: 차트 + 포트폴리오 ── */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
 
         {/* 수익률 차트 */}
-        <div className="col-span-2 card space-y-4">
+        <div className="md:col-span-2 card space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-gray-100">포트폴리오 수익률</h2>
@@ -264,7 +266,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
           </div>
 
           {/* Recharts 차트 */}
-          <div className="h-52">
+          <div className="h-44 md:h-52">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={displayData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
                 <defs>
@@ -282,7 +284,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
 
                 <XAxis
                   dataKey="d"
-                  tick={{ fill: '#6b7280', fontSize: 11 }}
+                  tick={{ fill: '#6b7280', fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
                   interval={range === '6M' ? 4 : 2}
@@ -290,10 +292,10 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
 
                 <YAxis
                   tickFormatter={fmtMillions}
-                  tick={{ fill: '#6b7280', fontSize: 11 }}
+                  tick={{ fill: '#6b7280', fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
-                  width={46}
+                  width={40}
                   domain={['auto', 'auto']}
                 />
 
@@ -324,7 +326,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
             ].map(({ label, value }) => (
               <div key={label} className="text-center">
                 <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-                <p className="text-sm font-semibold text-gray-200 font-mono">{value}</p>
+                <p className="text-xs md:text-sm font-semibold text-gray-200 font-mono">{value}</p>
               </div>
             ))}
           </div>
@@ -332,7 +334,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
 
         {/* 포트폴리오 배분 */}
         <div className="card">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between mb-4 md:mb-5">
             <h2 className="font-semibold text-gray-100">포트폴리오</h2>
             <button
               onClick={() => onNavigate('portfolio')}
@@ -344,7 +346,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
           </div>
 
           {/* 비율 바 */}
-          <div className="flex rounded-full overflow-hidden h-2 mb-5 gap-0.5">
+          <div className="flex rounded-full overflow-hidden h-2 mb-4 md:mb-5 gap-0.5">
             {PORTFOLIO_ITEMS.map((p, i) => (
               <div
                 key={p.name}
@@ -354,7 +356,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
             ))}
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2.5 md:space-y-3">
             {PORTFOLIO_ITEMS.map((p, i) => (
               <div key={p.name} className="flex items-center gap-3">
                 <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${PORTFOLIO_COLORS[i]}`} />
@@ -372,7 +374,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
             ))}
           </div>
 
-          <div className="mt-5 pt-4 border-t border-gray-800 grid grid-cols-2 gap-3">
+          <div className="mt-4 md:mt-5 pt-4 border-t border-gray-800 grid grid-cols-2 gap-3">
             <button className="flex items-center justify-center gap-1.5 py-2 rounded-xl
                                bg-gray-800 hover:bg-gray-700 text-sm text-gray-300 hover:text-white
                                transition-colors font-medium">
@@ -392,11 +394,11 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
       </div>
 
       {/* ── 메인 그리드 Row 2: 거래 내역 + 오답 노트 ── */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
 
         {/* 최근 거래 */}
-        <div className="col-span-2 card">
-          <div className="flex items-center justify-between mb-5">
+        <div className="md:col-span-2 card">
+          <div className="flex items-center justify-between mb-4 md:mb-5">
             <h2 className="font-semibold text-gray-100">최근 거래</h2>
             <button className="text-xs text-brand-400 hover:text-brand-300 transition-colors font-medium">
               전체 보기
@@ -406,10 +408,10 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: Page) => 
             {TRANSACTIONS.map((tx) => (
               <div
                 key={tx.id}
-                className="flex items-center gap-4 px-3 py-2.5 rounded-xl
+                className="flex items-center gap-3 md:gap-4 px-2 md:px-3 py-2.5 rounded-xl
                            hover:bg-gray-800/60 transition-colors group"
               >
-                <div className="w-9 h-9 rounded-xl bg-gray-800 flex items-center justify-center
+                <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gray-800 flex items-center justify-center
                                 flex-shrink-0 group-hover:bg-gray-700 transition-colors">
                   {tx.amount > 0
                     ? <ArrowDownRight className="w-4 h-4 text-emerald-400" />
@@ -556,7 +558,7 @@ function MistakeLog({
           새 매수 기록
         </button>
         <p className="text-xs text-gray-600">
-          원칙 위반 시 자동 기록됩니다
+          원칙 위반 시 자동 기록
         </p>
       </div>
     </div>

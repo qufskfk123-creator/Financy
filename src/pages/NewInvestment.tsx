@@ -250,7 +250,7 @@ export default function NewInvestment({ onNavigate }: Props) {
   if (savedDemo) {
     const violated = principles.filter((p) => !checkedIds.has(p.id))
     return (
-      <div className="flex items-center justify-center min-h-screen p-8">
+      <div className="flex items-center justify-center min-h-screen p-4 md:p-8">
         <div className="card max-w-md w-full text-center space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 flex items-center justify-center mx-auto">
             <TrendingUp className="w-7 h-7 text-emerald-400" />
@@ -290,13 +290,13 @@ export default function NewInvestment({ onNavigate }: Props) {
 
   // ── 메인 렌더 ──
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto">
 
       {/* 헤더 */}
-      <div className="flex items-center gap-4 mb-8">
+      <div className="flex items-center gap-4 mb-6 md:mb-8">
         <button
           onClick={() => onNavigate('dashboard')}
-          className="w-9 h-9 rounded-xl border border-gray-700 flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-600 transition-colors"
+          className="w-9 h-9 rounded-xl border border-gray-700 flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-600 transition-colors flex-shrink-0"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
@@ -306,11 +306,11 @@ export default function NewInvestment({ onNavigate }: Props) {
         </div>
       </div>
 
-      {/* 2 컬럼 레이아웃 */}
-      <div className="grid grid-cols-5 gap-6 items-start">
+      {/* 2 컬럼 레이아웃 — 모바일에서 1컬럼 */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-5 md:gap-6 items-start">
 
         {/* ── 왼쪽: 종목 정보 폼 ── */}
-        <div className="col-span-3 space-y-5">
+        <div className="md:col-span-3 space-y-5">
           <div className="card space-y-5">
             <h2 className="font-semibold text-gray-100">종목 정보</h2>
 
@@ -449,7 +449,7 @@ export default function NewInvestment({ onNavigate }: Props) {
         </div>
 
         {/* ── 오른쪽: 원칙 체크리스트 ── */}
-        <div className="col-span-2 space-y-4">
+        <div className="md:col-span-2 space-y-4">
           <div className="card space-y-4">
 
             {/* 체크리스트 헤더 */}
