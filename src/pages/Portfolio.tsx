@@ -7,9 +7,9 @@ import {
   TrendingUp,
   TrendingDown,
   AlertCircle,
-  Info,
   ChevronUp,
   ChevronDown,
+  BarChart2,
 } from 'lucide-react'
 import {
   getCachedPrice,
@@ -35,12 +35,7 @@ type PositionMeta = {
   avgBuyPrice:  number
 }
 
-const DEMO_POSITIONS: PositionMeta[] = [
-  { ticker: '069500', name: 'KODEX 200',         exchange: 'KRX',    currency: 'KRW', quantity: 500, avgBuyPrice: 32_000   },
-  { ticker: '005930', name: '삼성전자',            exchange: 'KRX',    currency: 'KRW', quantity: 160, avgBuyPrice: 73_000   },
-  { ticker: 'AAPL',   name: 'Apple Inc.',         exchange: 'NASDAQ', currency: 'USD', quantity: 25,  avgBuyPrice: 211.30   },
-  { ticker: 'SPY',    name: 'SPDR S&P 500 ETF',  exchange: 'NYSE',   currency: 'USD', quantity: 18,  avgBuyPrice: 482.50   },
-]
+const DEMO_POSITIONS: PositionMeta[] = []
 
 // ──────────────────────────────────────────
 // 유틸
@@ -371,20 +366,21 @@ export default function Portfolio() {
         </div>
       </div>
 
-      {/* ── API 미설정 안내 ── */}
-      {noDataCount === positions.length && (
-        <div className="flex items-start gap-3 px-4 py-3 bg-brand-600/10 border border-brand-600/20 rounded-xl">
-          <Info className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-brand-300/80 leading-relaxed">
-            <span className="font-medium text-brand-300">실시간 시세: </span>
-            <code className="text-xs bg-brand-600/20 px-1 py-0.5 rounded">vercel dev</code> 실행 후 사용 가능합니다.
-            또는 현재가를 <span className="font-medium">직접 입력</span>하세요.
+      {/* ── 빈 상태 ── */}
+      {positions.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center">
+            <BarChart2 className="w-8 h-8 text-gray-600" />
+          </div>
+          <div>
+            <p className="text-gray-300 font-semibold">포트폴리오가 비어 있습니다</p>
+            <p className="text-gray-600 text-sm mt-1">아직 등록된 종목이 없습니다.</p>
           </div>
         </div>
       )}
 
-      {/* ── 요약 카드 — 모바일 1열 / sm 이상 2열 ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* ── 요약 카드 — 종목이 있을 때만 렌더 ── */}
+      {positions.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <SummaryCard
           title="국내 종목 (KRW)"
           totalCost={krw.totalCost}
@@ -403,10 +399,10 @@ export default function Portfolio() {
           currency="USD"
           positions={usdPositions}
         />
-      </div>
+      </div>}
 
       {/* ── 포지션 테이블 (데스크톱) / 카드 (모바일) ── */}
-      <div className="card !p-0 overflow-hidden">
+      {positions.length > 0 && <div className="card !p-0 overflow-hidden">
 
         {/* ── 데스크톱 테이블 헤더 (md 이상) ── */}
         <div className="hidden md:grid grid-cols-[2fr_1fr_1.2fr_1.6fr_1.2fr_1fr] gap-4 px-5 py-3
@@ -542,16 +538,18 @@ export default function Portfolio() {
             </div>
           )
         })}
-      </div>
+      </div>}
 
       {/* ── 통계 바 ── */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-gray-600">
-        <span>{positions.length}개 종목</span>
-        {apiCount > 0    && <span className="text-emerald-600">API {apiCount}개</span>}
-        {manualCount > 0 && <span className="text-blue-600">수동 {manualCount}개</span>}
-        {noDataCount > 0 && <span className="text-gray-600">미입력 {noDataCount}개</span>}
-        <span className="sm:ml-auto">캐시 TTL: API 24시간 / 수동 무제한</span>
-      </div>
+      {positions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-gray-600">
+          <span>{positions.length}개 종목</span>
+          {apiCount > 0    && <span className="text-emerald-600">API {apiCount}개</span>}
+          {manualCount > 0 && <span className="text-blue-600">수동 {manualCount}개</span>}
+          {noDataCount > 0 && <span className="text-gray-600">미입력 {noDataCount}개</span>}
+          <span className="sm:ml-auto">캐시 TTL: API 24시간 / 수동 무제한</span>
+        </div>
+      )}
 
     </div>
   )
