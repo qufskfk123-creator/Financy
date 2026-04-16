@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
-import NewInvestment from './pages/NewInvestment'
 import Portfolio from './pages/Portfolio'
 
-export type Page = 'dashboard' | 'record' | 'portfolio' | 'transactions' | 'analytics' | 'settings'
+export type Page = 'dashboard' | 'portfolio' | 'transactions' | 'analytics' | 'settings'
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard')
@@ -14,10 +13,9 @@ export default function App() {
       <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
       {/* pb-16 md:pb-0 — 모바일 하단 탭바 높이만큼 여백 */}
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-        {currentPage === 'dashboard'  && <Dashboard onNavigate={setCurrentPage} />}
-        {currentPage === 'record'     && <NewInvestment onNavigate={setCurrentPage} />}
-        {currentPage === 'portfolio'  && <Portfolio />}
-        {currentPage !== 'dashboard' && currentPage !== 'record' && currentPage !== 'portfolio' && (
+        {currentPage === 'dashboard' && <Dashboard />}
+        {currentPage === 'portfolio' && <Portfolio />}
+        {currentPage !== 'dashboard' && currentPage !== 'portfolio' && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <p className="text-gray-600 text-sm uppercase tracking-widest mb-2">Coming Soon</p>

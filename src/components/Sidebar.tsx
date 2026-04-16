@@ -5,7 +5,6 @@ import {
   BarChart3,
   Settings,
   Zap,
-  PlusCircle,
 } from 'lucide-react'
 import type { Page } from '../App'
 
@@ -16,19 +15,18 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { id: 'dashboard',    label: '대시보드',   icon: LayoutDashboard },
+  { id: 'dashboard',    label: '기상도',     icon: LayoutDashboard },
   { id: 'portfolio',    label: '포트폴리오',  icon: PieChart },
   { id: 'transactions', label: '거래 내역',   icon: ArrowLeftRight },
   { id: 'analytics',    label: '분석',        icon: BarChart3 },
   { id: 'settings',     label: '설정',        icon: Settings },
 ]
 
-// 하단 탭바에 표시할 항목 (거래내역은 제외, FAB가 중앙)
 const bottomNavItems: NavItem[] = [
-  { id: 'dashboard',  label: '홈',      icon: LayoutDashboard },
-  { id: 'portfolio',  label: '포트폴리오', icon: PieChart },
-  { id: 'analytics',  label: '분석',    icon: BarChart3 },
-  { id: 'settings',   label: '설정',    icon: Settings },
+  { id: 'dashboard',    label: '기상도',    icon: LayoutDashboard },
+  { id: 'portfolio',    label: '포트폴리오', icon: PieChart },
+  { id: 'analytics',    label: '분석',      icon: BarChart3 },
+  { id: 'settings',     label: '설정',      icon: Settings },
 ]
 
 interface SidebarProps {
@@ -51,23 +49,8 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           </div>
         </div>
 
-        {/* 매수 기록 추가 버튼 */}
-        <div className="px-3 pt-4">
-          <button
-            onClick={() => onNavigate('record')}
-            className={`w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 ${
-              currentPage === 'record'
-                ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/25'
-                : 'bg-brand-600/20 text-brand-400 hover:bg-brand-600 hover:text-white hover:shadow-lg hover:shadow-brand-600/25'
-            }`}
-          >
-            <PlusCircle className="w-4 h-4 flex-shrink-0" />
-            매수 기록 추가
-          </button>
-        </div>
-
         {/* Nav */}
-        <nav className="flex-1 px-3 py-3 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1">
           <p className="px-3 pt-2 pb-1 text-xs font-medium text-gray-600 uppercase tracking-wider">메뉴</p>
           {navItems.map(({ id, label, icon: Icon }) => {
             const active = currentPage === id
@@ -97,7 +80,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-200 truncate">유태일</p>
-              <p className="text-xs text-gray-500 truncate">Premium</p>
+              <p className="text-xs text-gray-500 truncate">투자 기상도</p>
             </div>
           </div>
         </div>
@@ -107,51 +90,14 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50
                       bg-gray-900/95 backdrop-blur-md border-t border-gray-800
                       safe-area-inset-bottom">
-        <div className="flex items-center justify-around px-1 pt-1 pb-2">
-          {/* 왼쪽 2개 */}
-          {bottomNavItems.slice(0, 2).map(({ id, label, icon: Icon }) => {
+        <div className="flex items-center justify-around px-2 pt-1 pb-2">
+          {bottomNavItems.map(({ id, label, icon: Icon }) => {
             const active = currentPage === id
             return (
               <button
                 key={id}
                 onClick={() => onNavigate(id)}
-                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors duration-150 ${
-                  active ? 'text-brand-400' : 'text-gray-500 active:text-gray-300'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{label}</span>
-              </button>
-            )
-          })}
-
-          {/* 중앙 FAB — 매수 기록 추가 */}
-          <button
-            onClick={() => onNavigate('record')}
-            className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-all duration-150 ${
-              currentPage === 'record'
-                ? 'text-white'
-                : 'text-white active:scale-95'
-            }`}
-          >
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-colors ${
-              currentPage === 'record'
-                ? 'bg-brand-600 shadow-brand-600/40'
-                : 'bg-brand-600 hover:bg-brand-500 shadow-brand-600/30'
-            }`}>
-              <PlusCircle className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] font-medium text-brand-400">매수</span>
-          </button>
-
-          {/* 오른쪽 2개 */}
-          {bottomNavItems.slice(2).map(({ id, label, icon: Icon }) => {
-            const active = currentPage === id
-            return (
-              <button
-                key={id}
-                onClick={() => onNavigate(id)}
-                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors duration-150 ${
+                className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-colors duration-150 ${
                   active ? 'text-brand-400' : 'text-gray-500 active:text-gray-300'
                 }`}
               >
