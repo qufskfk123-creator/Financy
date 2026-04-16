@@ -1,10 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
+import type { User } from '@supabase/supabase-js'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
 import Transactions from './pages/Transactions'
+import Analytics from './pages/Analytics'
 import Settings, { type Theme } from './pages/Settings'
+import Auth from './pages/Auth'
 import ErrorBoundary from './components/ErrorBoundary'
+import AuthModal from './components/AuthModal'
+import { supabase } from './lib/supabase'
 import {
   loadTransactions,
   saveTransactions,
@@ -14,7 +19,7 @@ import {
   type Transaction,
 } from './lib/transactions'
 
-export type Page = 'dashboard' | 'portfolio' | 'transactions' | 'analytics' | 'settings'
+export type Page = 'dashboard' | 'portfolio' | 'transactions' | 'analytics' | 'settings' | 'auth'
 
 // ── One-time transaction backfill from existing portfolio assets ──
 
@@ -64,10 +69,18 @@ function backfillTransactions(): void {
 // ── App ────────────────────────────────────────────────────
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard')
+  const [currentPage, setCurrentPage]   = useState<Page>('dashboard')
+  const [user, setUser]                 = useState<User | null>(null)
+  const [showAuth, setShowAuth]         = useState(false)
+  const [authRedirectTo, setAuthRedirectTo] = useState<Page>('portfolio')
 
   const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('financy_theme') as Theme) ?? 'dark'
+    const stored = localStorage.getItem('financy_theme') as Theme | null
+    if (!stored) {
+      localStorage.setItem('financy_theme', 'dark')
+      return 'dark'
+    }
+    return stored
   })
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
@@ -75,14 +88,24 @@ export default function App() {
     return loadTransactions()
   })
 
-  // Apply theme attribute to <html> and persist to localStorage
+  // ── Supabase 세션 구독 ─────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      // 로그인 성공 시 모달 닫기
+      if (session?.user) setShowAuth(false)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // ── 테마 적용 ──────────────────────────────────────────────
   useEffect(() => {
     const html = document.documentElement
-    if (theme === 'light') {
-      html.setAttribute('data-theme', 'light')
-    } else {
-      html.removeAttribute('data-theme')
-    }
+    if (theme === 'light') html.setAttribute('data-theme', 'light')
+    else html.removeAttribute('data-theme')
     localStorage.setItem('financy_theme', theme)
   }, [theme])
 
@@ -95,11 +118,63 @@ export default function App() {
     })
   }, [])
 
+  const handleSignOut = useCallback(async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setCurrentPage('dashboard')
+  }, [])
+
+  // 보호된 페이지 이동 — 로그인 필요 시 Auth 페이지로
+  const handleNavigate = useCallback((page: Page) => {
+    if (page === 'portfolio' && !user) {
+      setAuthRedirectTo('portfolio')
+      setCurrentPage('auth')
+      return
+    }
+    setCurrentPage(page)
+  }, [user])
+
+  // 사용자 표시 이름: user_metadata.username → 이메일 앞부분 순으로 사용
+  const userName  = user
+    ? (user.user_metadata?.username as string | undefined) ?? user.email?.split('@')[0] ?? null
+    : null
+  const userEmail = user?.email ?? null
+
+  // Auth 페이지는 사이드바 없이 전체 화면으로 표시
+  if (currentPage === 'auth') {
+    return (
+      <Auth
+        redirectTo={authRedirectTo}
+        onNavigate={(page) => {
+          // 로그인 성공 후 목적지로 이동 (user 상태는 onAuthStateChange가 업데이트)
+          setCurrentPage(page)
+        }}
+      />
+    )
+  }
+
   return (
-    <div className="flex h-screen bg-gray-950 overflow-hidden">
-      <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
-      {/* pb-16 md:pb-0 — 모바일 하단 탭바 높이만큼 여백 */}
-      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+    <div className="flex h-screen bg-gray-950 overflow-hidden relative">
+      {/* Glassmorphism 배경 스팟 */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true" style={{ zIndex: 0 }}>
+        <div className="absolute w-[600px] h-[600px] -top-56 -left-32 bg-brand-600/5 rounded-full blur-3xl" />
+        <div className="absolute w-[500px] h-[500px] -bottom-48 -right-24 bg-violet-600/4 rounded-full blur-3xl" />
+        <div className="absolute w-[350px] h-[350px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-sky-600/3 rounded-full blur-3xl" />
+      </div>
+      <Sidebar
+        currentPage={currentPage}
+        onNavigate={handleNavigate}
+        userName={userName}
+        userEmail={userEmail}
+        onAuthClick={() => {
+          setAuthRedirectTo('dashboard')
+          setCurrentPage('auth')
+        }}
+        onSignOut={handleSignOut}
+      />
+
+      {/* pb-20 md:pb-0 — 모바일 하단 탭바 + 홈 인디케이터 여백 */}
+      <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
         {currentPage === 'dashboard' && (
           <ErrorBoundary label="대시보드">
             <Dashboard />
@@ -107,7 +182,7 @@ export default function App() {
         )}
         {currentPage === 'portfolio' && (
           <ErrorBoundary label="포트폴리오">
-            <Portfolio onTransaction={handleTransaction} />
+            <Portfolio onTransaction={handleTransaction} userId={user?.id ?? null} />
           </ErrorBoundary>
         )}
         {currentPage === 'transactions' && (
@@ -117,18 +192,28 @@ export default function App() {
         )}
         {currentPage === 'settings' && (
           <ErrorBoundary label="설정">
-            <Settings theme={theme} onTheme={setTheme} />
+            <Settings
+              theme={theme}
+              onTheme={setTheme}
+              userName={userName}
+              userEmail={userEmail}
+              onAuthClick={() => {
+                setAuthRedirectTo('dashboard')
+                setCurrentPage('auth')
+              }}
+              onSignOut={handleSignOut}
+            />
           </ErrorBoundary>
         )}
         {currentPage === 'analytics' && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <p className="text-gray-600 text-sm uppercase tracking-widest mb-2">Coming Soon</p>
-              <h2 className="text-2xl font-semibold text-gray-300">Analytics</h2>
-            </div>
-          </div>
+          <ErrorBoundary label="분석">
+            <Analytics userId={user?.id ?? null} />
+          </ErrorBoundary>
         )}
       </main>
+
+      {/* 레거시 인증 모달 (필요 시 사용) */}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </div>
   )
 }

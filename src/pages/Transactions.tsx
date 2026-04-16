@@ -76,7 +76,7 @@ function TxCard({ tx }: { tx: Transaction }) {
   return (
     <div className="flex items-center gap-3 py-3 px-1 -mx-1 rounded-xl hover:bg-gray-800/40 transition-colors group">
       {/* Type icon */}
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isBuy ? 'bg-brand-500/15' : 'bg-rose-500/15'}`}>
+      <div className={`w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 ${isBuy ? 'bg-brand-500/15' : 'bg-rose-500/15'}`}>
         {isBuy
           ? <TrendingUp className="w-4 h-4 text-brand-400" />
           : <TrendingDown className="w-4 h-4 text-rose-400" />}
@@ -98,7 +98,7 @@ function TxCard({ tx }: { tx: Transaction }) {
 
       {/* Amount */}
       <div className="text-right flex-shrink-0">
-        <p className={`text-sm font-bold mono ${isBuy ? 'text-gray-200' : 'text-rose-400'}`}>
+        <p className={`text-sm font-bold mono tabular-nums ${isBuy ? 'text-gray-200' : 'text-rose-400'}`}>
           {isBuy ? '' : '-'}{fmtMoney(tx.amount, tx.currency)}
         </p>
         <p className="text-[10px] text-gray-600">{isBuy ? '매수금액' : '매도금액'}</p>
@@ -123,17 +123,17 @@ function SummaryBar({ txs }: { txs: Transaction[] }) {
     <div className="grid grid-cols-3 gap-3">
       <div className="card !p-4 text-center">
         <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">전체 거래</p>
-        <p className="text-xl font-bold text-gray-200">{txs.length}<span className="text-xs text-gray-500 ml-1">건</span></p>
+        <p className="text-xl font-bold text-gray-200 tabular-nums">{txs.length}<span className="text-xs text-gray-500 ml-1">건</span></p>
       </div>
       <div className="card !p-4 text-center">
         <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">매수 {buyCnt}건</p>
-        <p className="text-sm font-bold text-brand-400 mono">
+        <p className="text-sm font-bold text-brand-400 mono tabular-nums">
           ₩{Math.round(buyTotal / 10_000).toLocaleString()}만
         </p>
       </div>
       <div className="card !p-4 text-center">
         <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">매도 {sellCnt}건</p>
-        <p className="text-sm font-bold text-rose-400 mono">
+        <p className="text-sm font-bold text-rose-400 mono tabular-nums">
           ₩{Math.round(sellTotal / 10_000).toLocaleString()}만
         </p>
       </div>
@@ -185,10 +185,10 @@ export default function Transactions({ transactions }: Props) {
   ]
 
   return (
-    <div className="p-4 md:p-8 space-y-5">
+    <div className="px-4 py-5 md:px-6 md:py-6 space-y-5 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-brand-600/20 flex items-center justify-center flex-shrink-0">
+        <div className="w-9 h-9 rounded-2xl bg-brand-600/20 flex items-center justify-center flex-shrink-0">
           <ArrowLeftRight className="w-4 h-4 text-brand-400" />
         </div>
         <div>
@@ -202,7 +202,7 @@ export default function Transactions({ transactions }: Props) {
 
       {/* Filter + Search */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex gap-1.5 bg-gray-900 border border-gray-800 rounded-xl p-1">
+        <div className="flex gap-1.5 bg-gray-900 border border-gray-800 rounded-2xl p-1">
           {filterBtns.map(({ id, label }) => (
             <button
               key={id}
@@ -225,7 +225,7 @@ export default function Transactions({ transactions }: Props) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="종목명 검색…"
-            className="w-full bg-gray-900 border border-gray-800 rounded-xl pl-9 pr-4 py-2 text-sm text-gray-100 placeholder:text-gray-600 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-colors"
+            className="w-full bg-gray-900 border border-gray-800 rounded-2xl pl-9 pr-4 py-2 text-sm text-gray-100 placeholder:text-gray-600 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-colors"
           />
         </div>
       </div>

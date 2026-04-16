@@ -48,9 +48,27 @@ export type QuoteResponse = {
 // 핸들러
 // ──────────────────────────────────────────
 
+// AbortSignal.timeout 폴백 — Node.js 17.3 미만 호환
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms)
+  const ctrl = new AbortController()
+  setTimeout(() => ctrl.abort(), ms)
+  return ctrl.signal
+}
+
+// 허용할 오리진 목록 — 실제 Vercel 배포 도메인으로 교체하세요
+const ALLOWED_ORIGINS = [
+  'https://financy-pied.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+]
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS — 같은 Vercel 도메인 + localhost 허용
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  // CORS — 허용된 오리진만 수락 (* 대신 명시적 도메인)
+  const origin = (req.headers.origin as string | undefined) ?? ''
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  res.setHeader('Access-Control-Allow-Origin', allowOrigin)
+  res.setHeader('Vary', 'Origin')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
@@ -77,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Referer':         'https://finance.yahoo.com/',
       },
       // 5초 타임아웃
-      signal: AbortSignal.timeout(5_000),
+      signal: timeoutSignal(5_000),
     })
 
     if (!response.ok) {

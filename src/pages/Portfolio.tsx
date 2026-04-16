@@ -11,6 +11,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Transaction } from '../lib/transactions'
 import {
+  fetchAssets,
+  upsertAsset,
+  deleteAsset as dbDeleteAsset,
+  migrateLocalToDb,
+} from '../lib/db'
+import {
   Plus,
   Minus,
   X,
@@ -981,72 +987,138 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
 
 // ── Main: Portfolio ────────────────────────────────────────
 
-export default function Portfolio({ onTransaction }: {
+export default function Portfolio({ onTransaction, userId }: {
   onTransaction?: (tx: Omit<Transaction, 'id' | 'date'>) => void
+  userId?: string | null
 }) {
-  const [assets, setAssets]     = useState<Asset[]>(() => loadAssets())
-  const [showForm, setShowForm] = useState(false)
+  // localStorage에서 즉시 초기화 — 마운트 시 빈 배열로 덮어쓰는 버그 방지
+  const [assets, setAssets]           = useState<Asset[]>(() => loadAssets())
+  const [showForm, setShowForm]       = useState(false)
+  const [dbLoading, setDbLoading]     = useState(false)
+  const [migrationPrompt, setMigrationPrompt] = useState(false)
+  const [migrateErr, setMigrateErr]   = useState('')
+  const [dbSaveErr, setDbSaveErr]     = useState(false)
 
-  // Keep a ref to assets so callbacks can read current values without deps
+  // Ref: 콜백 스테일 클로저 방지
   const assetsRef = useRef(assets)
   useEffect(() => { assetsRef.current = assets }, [assets])
 
-  useEffect(() => { saveAssets(assets) }, [assets])
+  // ── 데이터 로드 (userId 변경 시) ────────────────────────────
+  useEffect(() => {
+    if (userId) {
+      setDbLoading(true)
+      fetchAssets(userId)
+        .then(data => {
+          setAssets(data)
+          // 로컬에 데이터가 있고 DB가 비었으면 마이그레이션 안내
+          try {
+            const raw = localStorage.getItem('financy_assets')
+            if (raw) {
+              const local: any[] = JSON.parse(raw)
+              if (local.length > 0 && data.length === 0) setMigrationPrompt(true)
+            }
+          } catch {}
+        })
+        .catch(() => setAssets(loadAssets()))   // 실패 시 localStorage fallback
+        .finally(() => setDbLoading(false))
+    } else {
+      setAssets(loadAssets())
+    }
+  }, [userId])
+
+  // 항상 localStorage에 백업 저장 — 로그인 여부 무관, DB 실패 시에도 데이터 보존
+  useEffect(() => {
+    saveAssets(assets)
+  }, [assets])
+
+  // ── CRUD ────────────────────────────────────────────────────
 
   const handleAdd = useCallback((name: string, market: MarketType, quantity: number, price: number) => {
     const now = new Date().toISOString()
-    setAssets(prev => [...prev, {
+    const newAsset: Asset = {
       id: genId(), name, market, createdAt: now, sells: [],
       entries: [{ id: genId(), quantity, price, date: now }],
-    }])
+    }
+    setAssets(prev => [...prev, newAsset])
+    if (userId) upsertAsset(userId, newAsset).catch(e => { console.error(e); setDbSaveErr(true) })
     onTransaction?.({
       type: 'buy', name, market,
       currency: MARKET_CONFIG[market].currency,
       quantity, price, amount: quantity * price,
     })
-  }, [onTransaction])
+  }, [userId, onTransaction])
 
   const handleAddEntry = useCallback((assetId: string, qty: number, price: number) => {
+    const newEntry = { id: genId(), quantity: qty, price, date: new Date().toISOString() }
     setAssets(prev => prev.map(a => a.id !== assetId ? a : {
-      ...a, entries: [...a.entries, { id: genId(), quantity: qty, price, date: new Date().toISOString() }],
+      ...a, entries: [...a.entries, newEntry],
     }))
     const asset = assetsRef.current.find(a => a.id === assetId)
     if (asset) {
+      if (userId) upsertAsset(userId, { ...asset, entries: [...asset.entries, newEntry] }).catch(e => { console.error(e); setDbSaveErr(true) })
       onTransaction?.({
         type: 'buy', name: asset.name, market: asset.market,
         currency: MARKET_CONFIG[asset.market].currency,
         quantity: qty, price, amount: qty * price,
       })
     }
-  }, [onTransaction])
+  }, [userId, onTransaction])
 
   const handleAddSell = useCallback((assetId: string, qty: number, price: number) => {
+    const newSell = { id: genId(), quantity: qty, price, date: new Date().toISOString() }
     setAssets(prev => prev.map(a => a.id !== assetId ? a : {
-      ...a, sells: [...a.sells, { id: genId(), quantity: qty, price, date: new Date().toISOString() }],
+      ...a, sells: [...a.sells, newSell],
     }))
     const asset = assetsRef.current.find(a => a.id === assetId)
     if (asset) {
+      if (userId) upsertAsset(userId, { ...asset, sells: [...asset.sells, newSell] }).catch(e => { console.error(e); setDbSaveErr(true) })
       onTransaction?.({
         type: 'sell', name: asset.name, market: asset.market,
         currency: MARKET_CONFIG[asset.market].currency,
         quantity: qty, price, amount: qty * price,
       })
     }
-  }, [onTransaction])
+  }, [userId, onTransaction])
 
   const handleDeleteEntry = useCallback((assetId: string, entryId: string) => {
     setAssets(prev => prev.map(a => a.id !== assetId ? a : { ...a, entries: a.entries.filter(e => e.id !== entryId) }))
-  }, [])
+    if (userId) {
+      const asset = assetsRef.current.find(a => a.id === assetId)
+      if (asset) upsertAsset(userId, { ...asset, entries: asset.entries.filter(e => e.id !== entryId) }).catch(e => { console.error(e); setDbSaveErr(true) })
+    }
+  }, [userId])
 
   const handleDeleteSell = useCallback((assetId: string, sellId: string) => {
     setAssets(prev => prev.map(a => a.id !== assetId ? a : { ...a, sells: a.sells.filter(s => s.id !== sellId) }))
-  }, [])
+    if (userId) {
+      const asset = assetsRef.current.find(a => a.id === assetId)
+      if (asset) upsertAsset(userId, { ...asset, sells: asset.sells.filter(s => s.id !== sellId) }).catch(e => { console.error(e); setDbSaveErr(true) })
+    }
+  }, [userId])
 
   const handleDeleteAsset = useCallback((id: string) => {
     setAssets(prev => prev.filter(a => a.id !== id))
-  }, [])
+    if (userId) dbDeleteAsset(id).catch(e => { console.error(e); setDbSaveErr(true) })
+  }, [userId])
 
-  // 시장별 요약 (보유금액 기준)
+  // ── localStorage → Supabase 마이그레이션 ────────────────────
+  const handleMigrate = useCallback(async () => {
+    if (!userId) return
+    setMigrateErr('')
+    try {
+      const localAssets = loadAssets()
+      await migrateLocalToDb(userId, localAssets)
+      setAssets(localAssets)
+      localStorage.removeItem('financy_assets')
+      localStorage.removeItem('financy_tx_init')
+      setMigrationPrompt(false)
+    } catch (e: any) {
+      setMigrateErr(e?.message ?? '마이그레이션 실패')
+    }
+  }, [userId])
+
+  // ── 파생 계산 ─────────────────────────────────────────────
+
   const marketGroups = MARKET_TYPES.map(m => {
     const group = assets.filter(a => a.market === m)
     if (group.length === 0) return null
@@ -1055,21 +1127,65 @@ export default function Portfolio({ onTransaction }: {
     return { market: m, count: group.length, totalHolding, totalPL }
   }).filter(Boolean) as { market: MarketType; count: number; totalHolding: number; totalPL: number }[]
 
-  // 전체 실현손익 합계
   const grandPL = assets.reduce((s, a) => s + totalRealizedPL(a), 0)
   const hasPL   = assets.some(a => a.sells.length > 0)
 
+  // ── 렌더 ─────────────────────────────────────────────────
+
   return (
-    <div className="p-4 md:p-8 space-y-4 md:space-y-5">
+    <div className="px-4 py-5 md:px-6 md:py-6 space-y-4 max-w-5xl mx-auto">
+
+      {/* DB 저장 실패 배너 */}
+      {dbSaveErr && userId && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-3.5 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-300">클라우드 저장 실패</p>
+            <p className="text-xs text-amber-400/80 mt-0.5 leading-snug">
+              Supabase DB 테이블이 없거나 연결 오류가 발생했습니다. 데이터는 이 기기의 localStorage에 임시 저장됩니다.<br />
+              Supabase 대시보드 → SQL Editor에서 <code className="font-mono bg-amber-500/15 px-1 rounded">assets</code> 테이블을 생성하면 클라우드 저장이 활성화됩니다.
+            </p>
+          </div>
+          <button onClick={() => setDbSaveErr(false)} className="text-amber-500 hover:text-amber-300 text-xs flex-shrink-0">✕</button>
+        </div>
+      )}
+
+      {/* 마이그레이션 배너 */}
+      {migrationPrompt && userId && (
+        <div className="rounded-2xl border border-brand-500/30 bg-brand-500/10 px-5 py-4">
+          <div className="flex items-start gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-brand-300">기존 데이터를 계정으로 가져올까요?</p>
+              <p className="text-xs text-gray-400 mt-0.5 leading-snug">
+                로컬에 저장된 자산 데이터를 계정과 연결하면 어디서든 접근할 수 있습니다.
+              </p>
+              {migrateErr && <p className="text-xs text-rose-400 mt-1">{migrateErr}</p>}
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <button onClick={handleMigrate}
+                className="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold transition-colors">
+                가져오기
+              </button>
+              <button
+                onClick={() => { localStorage.removeItem('financy_assets'); setMigrationPrompt(false) }}
+                className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs font-semibold transition-colors">
+                무시
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-white">포트폴리오</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {assets.length === 0
-              ? '자산을 등록하면 위험 지수를 분석합니다'
-              : `${assets.length}개 종목 · ${assets.reduce((s, a) => s + a.entries.length, 0)}회 매수 · ${assets.reduce((s, a) => s + a.sells.length, 0)}회 매도`}
+            {dbLoading
+              ? '자산을 불러오는 중…'
+              : assets.length === 0
+                ? '자산을 등록하면 위험 지수를 분석합니다'
+                : `${assets.length}개 종목 · ${assets.reduce((s, a) => s + a.entries.length, 0)}회 매수 · ${assets.reduce((s, a) => s + a.sells.length, 0)}회 매도`}
           </p>
         </div>
         <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 btn-primary text-sm">
@@ -1077,79 +1193,102 @@ export default function Portfolio({ onTransaction }: {
         </button>
       </div>
 
-      {/* Risk Index Card */}
-      <RiskIndexCard assets={assets} />
-
-      {/* 전체 실현손익 배너 */}
-      {hasPL && (
-        <div className={`rounded-2xl border px-5 py-3.5 flex items-center justify-between ${grandPL >= 0 ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-rose-500/8 border-rose-500/20'}`}>
-          <div className="flex items-center gap-2">
-            {grandPL >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <TrendingDown className="w-4 h-4 text-rose-400" />}
-            <span className="text-sm font-semibold text-gray-300">전체 실현 손익</span>
-          </div>
-          <div className="text-right">
-            <p className={`text-lg font-bold mono ${grandPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {grandPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(grandPL), 'KRW')}
-            </p>
-            <p className="text-[10px] text-gray-600">매도 완료 기준 누적</p>
-          </div>
-        </div>
-      )}
-
-      {/* 시장별 요약 카드 */}
-      {marketGroups.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {marketGroups.map(({ market, count, totalHolding, totalPL }) => {
-            const cfg = MARKET_CONFIG[market]
-            const hasMktPL = assets.filter(a => a.market === market).some(a => a.sells.length > 0)
-            return (
-              <div key={market} className={`bg-gray-900 rounded-2xl p-4 border ${cfg.cardBorderCls}`}>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <span className="text-base leading-none">{cfg.emoji}</span>
-                  <span className={`text-[10px] font-semibold ${cfg.textCls}`}>{cfg.label}</span>
-                </div>
-                <p className={`text-sm font-bold mono ${cfg.textCls}`}>{fmtMoney(totalHolding, cfg.currency)}</p>
-                <p className="text-[10px] text-gray-600 mt-0.5">{count}개 종목</p>
-                {hasMktPL && (
-                  <p className={`text-[10px] font-semibold mono mt-1 ${totalPL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    실현 {totalPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(totalPL), cfg.currency)}
-                  </p>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Asset list / empty */}
-      {assets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center">
-            <PieChart className="w-8 h-8 text-gray-600" />
-          </div>
-          <div>
-            <p className="text-gray-300 font-semibold">포트폴리오가 비어 있습니다</p>
-            <p className="text-gray-600 text-sm mt-1">+ 자산 등록 버튼을 눌러 종목을 추가하세요</p>
-          </div>
-          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
-            <Plus className="w-4 h-4" />첫 자산 등록하기
-          </button>
-        </div>
-      ) : (
+      {/* DB 로딩 스켈레톤 */}
+      {dbLoading ? (
         <div className="space-y-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">보유 자산</p>
-          {assets.map(asset => (
-            <AssetCard
-              key={asset.id}
-              asset={asset}
-              onDeleteAsset={handleDeleteAsset}
-              onAddEntry={handleAddEntry}
-              onAddSell={handleAddSell}
-              onDeleteEntry={handleDeleteEntry}
-              onDeleteSell={handleDeleteSell}
-            />
+          {[0, 1, 2].map(i => (
+            <div key={i} className="card !p-4 animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gray-800" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 bg-gray-800 rounded w-1/3" />
+                  <div className="h-3 bg-gray-800 rounded w-1/2" />
+                </div>
+              </div>
+            </div>
           ))}
         </div>
+      ) : (
+        <>
+          <RiskIndexCard assets={assets} />
+
+          {hasPL && (
+            <div className={`rounded-2xl border px-5 py-3.5 flex items-center justify-between ${grandPL >= 0 ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-rose-500/8 border-rose-500/20'}`}>
+              <div className="flex items-center gap-2">
+                {grandPL >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <TrendingDown className="w-4 h-4 text-rose-400" />}
+                <span className="text-sm font-semibold text-gray-300">전체 실현 손익</span>
+              </div>
+              <div className="text-right">
+                <p className={`text-lg font-bold mono ${grandPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {grandPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(grandPL), 'KRW')}
+                </p>
+                <p className="text-[10px] text-gray-600">매도 완료 기준 누적</p>
+              </div>
+            </div>
+          )}
+
+          {marketGroups.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {marketGroups.map(({ market, count, totalHolding, totalPL }) => {
+                const cfg = MARKET_CONFIG[market]
+                const hasMktPL = assets.filter(a => a.market === market).some(a => a.sells.length > 0)
+                return (
+                  <div key={market} className={`bg-gray-900 rounded-2xl p-4 border ${cfg.cardBorderCls}`}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="text-base leading-none">{cfg.emoji}</span>
+                      <span className={`text-[10px] font-semibold ${cfg.textCls}`}>{cfg.label}</span>
+                    </div>
+                    <p className={`text-sm font-bold mono ${cfg.textCls}`}>{fmtMoney(totalHolding, cfg.currency)}</p>
+                    <p className="text-[10px] text-gray-600 mt-0.5">{count}개 종목</p>
+                    {hasMktPL && (
+                      <p className={`text-[10px] font-semibold mono mt-1 ${totalPL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        실현 {totalPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(totalPL), cfg.currency)}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {assets.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center">
+                <PieChart className="w-8 h-8 text-gray-600" />
+              </div>
+              <div>
+                <p className="text-gray-300 font-semibold">포트폴리오가 비어 있습니다</p>
+                <p className="text-gray-600 text-sm mt-1">+ 자산 등록 버튼을 눌러 종목을 추가하세요</p>
+              </div>
+              <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
+                <Plus className="w-4 h-4" />첫 자산 등록하기
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">보유 자산</p>
+                {userId && (
+                  <span className="text-[10px] text-gray-700 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    클라우드 저장됨
+                  </span>
+                )}
+              </div>
+              {assets.map(asset => (
+                <AssetCard
+                  key={asset.id}
+                  asset={asset}
+                  onDeleteAsset={handleDeleteAsset}
+                  onAddEntry={handleAddEntry}
+                  onAddSell={handleAddSell}
+                  onDeleteEntry={handleDeleteEntry}
+                  onDeleteSell={handleDeleteSell}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {showForm && <AddAssetForm onAdd={handleAdd} onClose={() => setShowForm(false)} />}

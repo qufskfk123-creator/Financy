@@ -17,6 +17,14 @@ interface FrankfurterResponse {
   date: string
 }
 
+// AbortSignal.timeout 폴백 — Node.js 17.3 미만 호환
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms)
+  const ctrl = new AbortController()
+  setTimeout(() => ctrl.abort(), ms)
+  return ctrl.signal
+}
+
 function prevBusinessDay(): string {
   const d = new Date()
   d.setDate(d.getDate() - 1)
@@ -26,8 +34,17 @@ function prevBusinessDay(): string {
   return d.toISOString().split('T')[0]
 }
 
+const ALLOWED_ORIGINS = [
+  'https://financy-pied.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+]
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  const origin = (req.headers.origin as string | undefined) ?? ''
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  res.setHeader('Access-Control-Allow-Origin', allowOrigin)
+  res.setHeader('Vary', 'Origin')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   if (req.method === 'OPTIONS') return res.status(200).end()
 
@@ -36,10 +53,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const [currentRes, prevRes] = await Promise.all([
       fetch('https://api.frankfurter.app/latest?from=USD&to=KRW,JPY,EUR', {
-        signal: AbortSignal.timeout(6_000),
+        signal: timeoutSignal(6_000),
       }),
       fetch(`https://api.frankfurter.app/${prevDay}?from=USD&to=KRW,JPY,EUR`, {
-        signal: AbortSignal.timeout(6_000),
+        signal: timeoutSignal(6_000),
       }),
     ])
 
