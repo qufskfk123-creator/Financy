@@ -5,6 +5,7 @@
 @layer base {
   body {
     @apply bg-gray-950 text-gray-100 font-sans antialiased;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   * {
@@ -32,6 +33,7 @@
 @layer components {
   .card {
     @apply bg-gray-900 border border-gray-800 rounded-2xl p-6;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
   }
 
   .card-hover {
@@ -62,3 +64,102 @@
     @apply font-mono;
   }
 }
+
+/* ── CSS variables — theme tokens ────────────────────────────
+   Used in SVG attributes (fill="var(--...)") where Tailwind
+   classes can't reach. Overridden in [data-theme="light"].
+   ─────────────────────────────────────────────────────────── */
+
+:root {
+  --gauge-bg:           #111827;
+  --gauge-border:       #1f2937;
+  --gauge-tick-stroke:  #374151;
+  --gauge-tick-label:   #4b5563;
+  --gauge-needle:       #ffffff;
+  --gauge-center-bg:    #ffffff;
+  --gauge-center-ring:  #0f172a;
+}
+
+[data-theme="light"] {
+  --gauge-bg:           #f8fafc;
+  --gauge-border:       #e2e8f0;
+  --gauge-tick-stroke:  #cbd5e1;
+  --gauge-tick-label:   #94a3b8;
+  --gauge-needle:       #334155;
+  --gauge-center-bg:    #f8fafc;
+  --gauge-center-ring:  #e2e8f0;
+}
+
+/* ── Light mode overrides ────────────────────────────────────
+   [data-theme="light"] specificity (0,2,0) beats Tailwind class (0,1,0)
+   so !important is not needed.
+   ─────────────────────────────────────────────────────────── */
+
+[data-theme="light"] body {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Backgrounds */
+[data-theme="light"] .bg-gray-950 { background-color: #f1f5f9; }
+[data-theme="light"] .bg-gray-900 { background-color: #ffffff; }
+[data-theme="light"] .bg-gray-850 { background-color: #f8fafc; }
+[data-theme="light"] .bg-gray-800 { background-color: #f1f5f9; }
+[data-theme="light"] .bg-gray-800\/40 { background-color: rgba(241,245,249,0.4); }
+[data-theme="light"] .bg-gray-800\/50 { background-color: rgba(241,245,249,0.5); }
+[data-theme="light"] .bg-gray-800\/60 { background-color: rgba(241,245,249,0.6); }
+[data-theme="light"] .bg-gray-800\/70 { background-color: rgba(241,245,249,0.7); }
+[data-theme="light"] .bg-gray-700 { background-color: #e2e8f0; }
+
+/* Hover backgrounds */
+[data-theme="light"] .hover\:bg-gray-800:hover { background-color: #f1f5f9; }
+[data-theme="light"] .hover\:bg-gray-700:hover { background-color: #e2e8f0; }
+[data-theme="light"] .active\:text-gray-300:active { color: #475569; }
+
+/* Text */
+[data-theme="light"] .text-white   { color: #0f172a; }
+[data-theme="light"] .text-gray-100 { color: #0f172a; }
+[data-theme="light"] .text-gray-200 { color: #1e293b; }
+[data-theme="light"] .text-gray-300 { color: #334155; }
+[data-theme="light"] .text-gray-400 { color: #475569; }
+[data-theme="light"] .text-gray-500 { color: #64748b; }
+[data-theme="light"] .text-gray-600 { color: #94a3b8; }
+[data-theme="light"] .text-gray-700 { color: #b2bfd0; }
+
+/* Hover text */
+[data-theme="light"] .hover\:text-gray-100:hover { color: #0f172a; }
+[data-theme="light"] .hover\:text-gray-300:hover { color: #334155; }
+[data-theme="light"] .hover\:text-gray-200:hover { color: #1e293b; }
+
+/* Borders */
+[data-theme="light"] .border-gray-800 { border-color: #e2e8f0; }
+[data-theme="light"] .border-gray-700 { border-color: #cbd5e1; }
+[data-theme="light"] .border-t { border-top-color: #e2e8f0; }
+
+/* Divide */
+[data-theme="light"] .divide-gray-800\/60 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(226,232,240,0.6);
+}
+[data-theme="light"] .divide-gray-800\/70 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(226,232,240,0.7);
+}
+[data-theme="light"] .divide-gray-800\/80 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(226,232,240,0.8);
+}
+
+/* Sidebar aside */
+[data-theme="light"] aside.bg-gray-900 { background-color: #ffffff; }
+
+/* Scrollbar */
+[data-theme="light"] ::-webkit-scrollbar-track { background: #f1f5f9; }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Inputs */
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="number"] {
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+[data-theme="light"] input::placeholder { color: #94a3b8; }

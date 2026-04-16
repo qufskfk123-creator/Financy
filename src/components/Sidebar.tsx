@@ -5,6 +5,7 @@ import {
   BarChart3,
   Settings,
   Zap,
+  User,
 } from 'lucide-react'
 import type { Page } from '../App'
 
@@ -25,7 +26,7 @@ const navItems: NavItem[] = [
 const bottomNavItems: NavItem[] = [
   { id: 'dashboard',    label: '기상도',    icon: LayoutDashboard },
   { id: 'portfolio',    label: '포트폴리오', icon: PieChart },
-  { id: 'analytics',    label: '분석',      icon: BarChart3 },
+  { id: 'transactions', label: '거래',      icon: ArrowLeftRight },
   { id: 'settings',     label: '설정',      icon: Settings },
 ]
 
@@ -75,12 +76,12 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         {/* User */}
         <div className="p-4 border-t border-gray-800">
           <div className="flex items-center gap-3 px-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-400 to-brand-700 flex items-center justify-center text-xs font-bold text-white">
-              유
+            <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-gray-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-200 truncate">유태일</p>
-              <p className="text-xs text-gray-500 truncate">투자 기상도</p>
+              <p className="text-sm font-medium text-gray-200 truncate">Guest</p>
+              <p className="text-xs text-gray-500 truncate">로그인 전 익명 상태</p>
             </div>
           </div>
         </div>

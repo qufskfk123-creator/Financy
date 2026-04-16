@@ -24,6 +24,7 @@ import {
   BarChart2,
   Newspaper,
   AlertCircle,
+  Waves,
 } from 'lucide-react'
 
 // ── 타입 ───────────────────────────────────────────────────
@@ -52,6 +53,18 @@ interface NewsItem {
   link: string
   pubDate: string
   source: string
+}
+
+interface LiquidityData {
+  score:        number
+  label:        string
+  desc:         string
+  nasdaqChg:    number | null
+  dollarChg:    number | null
+  nasdaqPrice:  number | null
+  dollarPrice:  number | null
+  partial?:     boolean
+  error?:       string
 }
 
 // ── SVG 게이지 ─────────────────────────────────────────────
@@ -91,7 +104,7 @@ function FearGreedGauge({ value, loading }: { value: number; loading: boolean })
 
   return (
     <svg viewBox="0 0 300 152" className="w-full select-none" aria-label={`공포 탐욕 지수: ${value}`}>
-      <path d={arcPath(cx, cy, innerR - 3, outerR + 3, 180, 0)} fill="#111827" stroke="#1f2937" strokeWidth="1" />
+      <path d={arcPath(cx, cy, innerR - 3, outerR + 3, 180, 0)} fill="var(--gauge-bg)" stroke="var(--gauge-border)" strokeWidth="1" />
 
       {GAUGE_ZONES.map((zone, i) => {
         const a1 = toAngle(zone.from) - (i === 0 ? 0 : gap / 2)
@@ -110,8 +123,8 @@ function FearGreedGauge({ value, loading }: { value: number; loading: boolean })
         const lb = polarXY(cx, cy, outerR + 18, a)
         return (
           <g key={v}>
-            <line x1={t1.x.toFixed(1)} y1={t1.y.toFixed(1)} x2={t2.x.toFixed(1)} y2={t2.y.toFixed(1)} stroke="#374151" strokeWidth="1.5" />
-            <text x={lb.x.toFixed(1)} y={lb.y.toFixed(1)} textAnchor="middle" dominantBaseline="middle" fill="#4b5563" fontSize="8.5">{v}</text>
+            <line x1={t1.x.toFixed(1)} y1={t1.y.toFixed(1)} x2={t2.x.toFixed(1)} y2={t2.y.toFixed(1)} stroke="var(--gauge-tick-stroke)" strokeWidth="1.5" />
+            <text x={lb.x.toFixed(1)} y={lb.y.toFixed(1)} textAnchor="middle" dominantBaseline="middle" fill="var(--gauge-tick-label)" fontSize="8.5">{v}</text>
           </g>
         )
       })}
@@ -123,13 +136,13 @@ function FearGreedGauge({ value, loading }: { value: number; loading: boolean })
         const tip = polarXY(cx, cy, outerR - 6, toAngle(value))
         return (
           <>
-            <line x1={cx} y1={cy} x2={tip.x.toFixed(2)} y2={tip.y.toFixed(2)} stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-            <circle cx={cx} cy={cy} r="6.5" fill="white" stroke="#0f172a" strokeWidth="2" />
+            <line x1={cx} y1={cy} x2={tip.x.toFixed(2)} y2={tip.y.toFixed(2)} stroke="var(--gauge-needle)" strokeWidth="2.5" strokeLinecap="round" />
+            <circle cx={cx} cy={cy} r="6.5" fill="var(--gauge-center-bg)" stroke="var(--gauge-center-ring)" strokeWidth="2" />
           </>
         )
       })()}
 
-      {loading && <text x={cx} y={cy + 5} textAnchor="middle" fill="#374151" fontSize="12">데이터 불러오는 중...</text>}
+      {loading && <text x={cx} y={cy + 5} textAnchor="middle" fill="var(--gauge-tick-label)" fontSize="12">데이터 불러오는 중...</text>}
     </svg>
   )
 }
@@ -199,6 +212,154 @@ function Skel({ w = 'w-full' }: { w?: string }) {
   return <div className={`h-3.5 rounded bg-gray-800 animate-pulse ${w}`} />
 }
 
+// ── 자금 흐름 온도계 ───────────────────────────────────────
+
+const LIQUIDITY_ZONES = [
+  { from: 0,  to: 28,  label: '강한 안전', color: 'text-blue-400',   badge: 'bg-blue-500/15 border-blue-500/30',   dot: 'bg-blue-400'   },
+  { from: 28, to: 43,  label: '안전',      color: 'text-sky-400',    badge: 'bg-sky-500/15 border-sky-500/30',     dot: 'bg-sky-400'    },
+  { from: 43, to: 57,  label: '혼조',      color: 'text-gray-400',   badge: 'bg-gray-800 border-gray-700',         dot: 'bg-gray-500'   },
+  { from: 57, to: 72,  label: '위험',      color: 'text-amber-400',  badge: 'bg-amber-500/15 border-amber-500/30', dot: 'bg-amber-400'  },
+  { from: 72, to: 100, label: '강한 위험', color: 'text-orange-400', badge: 'bg-orange-500/15 border-orange-500/30', dot: 'bg-orange-400' },
+]
+
+function getLiqCfg(score: number) {
+  return LIQUIDITY_ZONES.find(z => score < z.to) ?? LIQUIDITY_ZONES[LIQUIDITY_ZONES.length - 1]
+}
+
+function LiquidityCard({ data, loading }: { data: LiquidityData | null; loading: boolean }) {
+  const score = data?.score ?? 50
+  const cfg   = getLiqCfg(score)
+
+  // 화살표 위치: 0~100 → 2%~98% (끝 잘림 방지)
+  const pct = Math.round(2 + (score / 100) * 96)
+
+  return (
+    <div className="card space-y-4">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Waves className="w-3.5 h-3.5 text-brand-400" />
+          <span className="text-xs font-semibold text-gray-200 uppercase tracking-wide">자금 흐름 온도계</span>
+        </div>
+        <span className="text-[10px] text-gray-600">Liquidity Flow</span>
+      </div>
+
+      {/* 게이지 영역 */}
+      <div className="space-y-2">
+        {/* 구간 라벨 */}
+        <div className="flex justify-between text-[10px] text-gray-500 px-0.5">
+          <span>🏦 안전자산</span>
+          <span className="text-gray-600">혼조세</span>
+          <span>위험자산 📈</span>
+        </div>
+
+        {/* 그라디언트 바 */}
+        <div className="relative">
+          <div className="h-3.5 rounded-full bg-gradient-to-r from-blue-500 via-slate-600 to-orange-500 opacity-75" />
+
+          {/* 커서 */}
+          {!loading && (
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-white border-2 border-gray-900 shadow-lg transition-all duration-700"
+              style={{ left: `${pct}%` }}
+            />
+          )}
+          {loading && (
+            <div className="absolute inset-0 rounded-full bg-gray-800/60 animate-pulse" />
+          )}
+        </div>
+
+        {/* 눈금 */}
+        <div className="flex justify-between px-0.5 text-[9px] text-gray-700">
+          {[0, 25, 50, 75, 100].map(v => (
+            <span key={v}>{v}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* 상태 뱃지 + 설명 */}
+      <div className="flex flex-col items-center gap-2">
+        {loading ? (
+          <div className="w-36 h-8 bg-gray-800 rounded-xl animate-pulse" />
+        ) : (
+          <>
+            <div className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-2xl border ${cfg.badge}`}>
+              <span className={`w-2 h-2 rounded-full ${cfg.dot} animate-pulse flex-shrink-0`} />
+              <span className={`text-sm font-bold tracking-wide ${cfg.color}`}>{data?.label ?? '혼조세'}</span>
+              <span className={`text-xs mono opacity-60 ${cfg.color}`}>{score}</span>
+            </div>
+            {data?.desc && (
+              <p className="text-[11px] text-gray-500 text-center leading-snug max-w-xs">{data.desc}</p>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 나스닥 vs 달러 인덱스 */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl bg-gray-800/60 border border-gray-700/50 px-3 py-2.5 space-y-1">
+          <p className="text-[10px] text-gray-500">나스닥 5일 등락</p>
+          {loading ? (
+            <Skel w="w-3/4" />
+          ) : data?.nasdaqChg != null ? (
+            <>
+              <div className="flex items-center gap-1">
+                {data.nasdaqChg >= 0
+                  ? <TrendingUp className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                  : <TrendingDown className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />}
+                <span className={`text-sm font-bold mono ${data.nasdaqChg >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {data.nasdaqChg >= 0 ? '+' : ''}{data.nasdaqChg.toFixed(2)}%
+                </span>
+              </div>
+              {data.nasdaqPrice && (
+                <p className="text-[10px] text-gray-600 mono">
+                  {data.nasdaqPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-gray-600 text-xs">조회 실패</p>
+          )}
+        </div>
+
+        <div className="rounded-xl bg-gray-800/60 border border-gray-700/50 px-3 py-2.5 space-y-1">
+          <p className="text-[10px] text-gray-500">달러 인덱스 5일 등락</p>
+          {loading ? (
+            <Skel w="w-3/4" />
+          ) : data?.dollarChg != null ? (
+            <>
+              <div className="flex items-center gap-1">
+                {data.dollarChg >= 0
+                  ? <TrendingUp className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                  : <TrendingDown className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />}
+                <span className={`text-sm font-bold mono ${data.dollarChg >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {data.dollarChg >= 0 ? '+' : ''}{data.dollarChg.toFixed(2)}%
+                </span>
+              </div>
+              {data.dollarPrice && (
+                <p className="text-[10px] text-gray-600 mono">{data.dollarPrice.toFixed(2)}</p>
+              )}
+            </>
+          ) : (
+            <p className="text-gray-600 text-xs">조회 실패</p>
+          )}
+        </div>
+      </div>
+
+      {/* 부분 실패 / 에러 */}
+      {data?.partial && !data.error && (
+        <p className="text-[10px] text-amber-600 flex items-center gap-1.5">
+          <AlertCircle className="w-3 h-3 flex-shrink-0" />
+          일부 데이터 미수신 — 점수는 참고용입니다
+        </p>
+      )}
+      {data?.error && <ErrLine msg="데이터 점검 중 — 잠시 후 자동 재시도됩니다" />}
+
+      <p className="text-[10px] text-gray-700">Yahoo Finance (^IXIC, DX-Y.NYB) · 5일 종가 기준</p>
+    </div>
+  )
+}
+
 // ── 메인 컴포넌트 ──────────────────────────────────────────
 
 export default function Dashboard() {
@@ -207,6 +368,7 @@ export default function Dashboard() {
   const [tnx,     setTnx]     = useState<{ data: QuoteData | null; loading: boolean }>({ data: null, loading: true })
   const [irx,     setIrx]     = useState<{ data: QuoteData | null; loading: boolean }>({ data: null, loading: true })
   const [news,    setNews]    = useState<{ items: NewsItem[]; loading: boolean; error?: string }>({ items: [], loading: true })
+  const [liq,     setLiq]     = useState<{ data: LiquidityData | null; loading: boolean }>({ data: null, loading: true })
   const [spinning, setSpinning] = useState(false)
 
   const fetchAll = useCallback(() => {
@@ -240,6 +402,12 @@ export default function Dashboard() {
       .then(d => setNews({ items: d.items ?? [], loading: false, error: d.error }))
       .catch(e => setNews({ items: [], loading: false, error: e.message }))
 
+    setLiq(p => ({ ...p, loading: true }))
+    fetch('/api/liquidity')
+      .then(r => r.json())
+      .then(d => setLiq({ data: d.error ? { ...d, score: 50, label: '혼조세', desc: '' } : d, loading: false }))
+      .catch(() => setLiq({ data: null, loading: false }))
+
     setTimeout(() => setSpinning(false), 1_200)
   }, [])
 
@@ -269,7 +437,7 @@ export default function Dashboard() {
       {/* ── 헤더 ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-4 md:mb-3 flex-shrink-0">
         <div>
-          <h1 className="text-lg font-bold text-white tracking-tight">오늘의 투자 기상도</h1>
+          <h1 className="text-lg font-bold text-gray-100 tracking-tight">오늘의 투자 기상도</h1>
           <p className="text-[11px] text-gray-500 mt-0.5">{today}</p>
         </div>
         <button
@@ -313,7 +481,7 @@ export default function Dashboard() {
           <div className="flex flex-col items-center gap-2.5 mt-1 w-full">
             {fg.loading
               ? <div className="w-14 h-9 rounded-lg bg-gray-800 animate-pulse" />
-              : <span className="text-4xl md:text-5xl font-bold text-white mono">{fgValue}</span>
+              : <span className="text-4xl md:text-5xl font-bold text-gray-100 mono">{fgValue}</span>
             }
 
             <div className={`inline-flex items-center gap-2 px-5 py-2 rounded-2xl border ${status.badge}`}>
@@ -334,8 +502,11 @@ export default function Dashboard() {
         </div>
         {/* ╚══════════════════════════════════════════════════╝ */}
 
-        {/* ╔══ 우: 3개 카드 열 ══════════════════════════════╗ */}
+        {/* ╔══ 우: 카드 열 ══════════════════════════════════╗ */}
         <div className="space-y-4 md:space-y-3 md:overflow-y-auto md:min-h-0 md:pr-0.5">
+
+          {/* ── 자금 흐름 온도계 ── */}
+          <LiquidityCard data={liq.data} loading={liq.loading} />
 
           {/* ── 환율 상태 ── */}
           <div className="card md:p-4">
@@ -354,7 +525,7 @@ export default function Dashboard() {
                       <span className="text-gray-600 text-xs ml-1.5">USD/{rate.code}</span>
                     </span>
                     <div className="flex items-center gap-2.5">
-                      <span className="text-white font-semibold mono text-sm">
+                      <span className="text-gray-100 font-semibold mono text-sm">
                         {rate.code === 'KRW'
                           ? `₩${rate.rate.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}`
                           : rate.code === 'JPY'
@@ -386,7 +557,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center gap-2.5">
                     {tnx.data
-                      ? <><span className="text-white font-bold mono text-sm">{tnx.data.price.toFixed(2)}%</span><ChangeChip pct={tnx.data.changePercent} /></>
+                      ? <><span className="text-gray-100 font-bold mono text-sm">{tnx.data.price.toFixed(2)}%</span><ChangeChip pct={tnx.data.changePercent} /></>
                       : <span className="text-gray-600 text-xs">조회 실패</span>}
                   </div>
                 </div>
@@ -399,7 +570,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center gap-2.5">
                     {irx.data
-                      ? <><span className="text-white font-bold mono text-sm">{irx.data.price.toFixed(2)}%</span><ChangeChip pct={irx.data.changePercent} /></>
+                      ? <><span className="text-gray-100 font-bold mono text-sm">{irx.data.price.toFixed(2)}%</span><ChangeChip pct={irx.data.changePercent} /></>
                       : <span className="text-gray-600 text-xs">조회 실패</span>}
                   </div>
                 </div>
