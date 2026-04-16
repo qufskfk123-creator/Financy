@@ -67,8 +67,13 @@ export async function getPrice(ticker: string): Promise<PriceResult | null> {
 
     // 3. 캐시 업데이트 (실패해도 결과는 반환)
     try {
-      await supabase.from('ticker_cache' as never).upsert({
-        ticker: t, price: json.price, currency, updated_at: now,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cacheTable = supabase.from('ticker_cache' as never) as any
+      await cacheTable.upsert({
+        ticker:     t,
+        price:      json.price as number,
+        currency:   currency as string,
+        updated_at: now as string,
       })
     } catch { /* 무시 */ }
 
