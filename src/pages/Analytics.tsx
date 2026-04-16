@@ -9,7 +9,7 @@ import {
   XAxis, YAxis, ResponsiveContainer,
 } from 'recharts'
 import {
-  TrendingUp, TrendingDown, BarChart2, RefreshCw,
+  BarChart2, RefreshCw,
   Info, ChevronDown, ChevronUp, AlertCircle,
 } from 'lucide-react'
 import type { Asset, MarketType } from './Portfolio'
@@ -358,7 +358,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
                   paddingAngle={3}
                   dataKey="value"
                   labelLine={false}
-                  label={PieLabelInner}
+                  label={PieLabelInner as any}
                 >
                   {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
