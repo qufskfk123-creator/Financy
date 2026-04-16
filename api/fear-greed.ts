@@ -40,8 +40,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       timestamp:      parseInt(fng.timestamp, 10),
       updatedAt:      new Date().toISOString(),
     })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    return res.status(500).json({ error: `Fear & Greed Index 조회 실패: ${message}` })
+  } catch {
+    // 외부 API 실패 시 중립 더미 데이터 반환 — 프론트엔드가 멈추지 않도록
+    return res.status(200).json({
+      value:          50,
+      classification: 'Neutral',
+      timestamp:      Math.floor(Date.now() / 1000),
+      updatedAt:      new Date().toISOString(),
+      fallback:       true,
+    })
   }
 }

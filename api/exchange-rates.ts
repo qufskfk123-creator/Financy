@@ -94,9 +94,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       date:      current.date,
       updatedAt: new Date().toISOString(),
     })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    return res.status(500).json({ error: `환율 조회 실패: ${message}` })
+  } catch {
+    // 외부 API 실패 시 최근 기준 더미 환율 반환 — 프론트엔드가 멈추지 않도록
+    return res.status(200).json({
+      rates: [
+        { code: 'KRW', label: '달러/원',   symbol: '₩', decimals: 0, rate: 1350,   prevRate: 1350,   change: 0,      changePct: 0 },
+        { code: 'JPY', label: '달러/엔',   symbol: '¥', decimals: 2, rate: 154.00, prevRate: 154.00, change: 0,      changePct: 0 },
+        { code: 'EUR', label: '달러/유로', symbol: '€', decimals: 4, rate: 0.9300, prevRate: 0.9300, change: 0,      changePct: 0 },
+      ],
+      date:      new Date().toISOString().split('T')[0],
+      updatedAt: new Date().toISOString(),
+      fallback:  true,
+    })
   }
 }
 

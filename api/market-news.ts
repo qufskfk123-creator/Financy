@@ -98,5 +98,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  return res.status(500).json({ error: '뉴스 조회 실패: 모든 소스 응답 없음', items: [] })
+  // 모든 소스 실패 시에도 200으로 빈 목록 반환 — 프론트엔드가 멈추지 않도록
+  return res.status(200).json({ items: [], source: null, updatedAt: new Date().toISOString(), fallback: true })
 }

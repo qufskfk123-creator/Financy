@@ -1098,7 +1098,7 @@ export default function Portfolio({ onTransaction, userId }: {
 
   const handleDeleteAsset = useCallback((id: string) => {
     setAssets(prev => prev.filter(a => a.id !== id))
-    if (userId) dbDeleteAsset(id).catch(e => { console.error(e); setDbSaveErr(true) })
+    if (userId) dbDeleteAsset(id, userId).catch(e => { console.error(e); setDbSaveErr(true) })
   }, [userId])
 
   // ── localStorage → Supabase 마이그레이션 ────────────────────

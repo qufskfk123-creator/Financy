@@ -364,7 +364,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [fmtMan(value), '']} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -537,7 +537,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
                           <AlertCircle className="w-3.5 h-3.5 text-fall flex-shrink-0" />
                           <span>데이터 확인 불가 — 티커 코드를 다시 확인해주세요</span>
                         </div>
-                      ) : live && live !== 'error' ? (
+                      ) : live ? (
                         <div className="grid grid-cols-3 gap-3">
                           <div>
                             <p className="text-[10px] text-gray-600 mb-0.5">현재가</p>

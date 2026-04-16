@@ -1,16 +1,16 @@
 /**
  * Supabase DB — assets 테이블 CRUD
  *
- * ══ Supabase Dashboard > SQL Editor 에서 실행 ══════════════
+ * ══ 실제 Supabase 테이블 스키마 ══════════════════════════════
  *
  * create table public.assets (
- *   id         text        primary key,
- *   user_id    uuid        not null references auth.users(id) on delete cascade,
+ *   ticker     text        not null,
  *   name       text        not null,
- *   market     text        not null check (market in ('K-Stock','U-Stock','Crypto','Cash')),
- *   created_at timestamptz not null default now(),
- *   entries    jsonb       not null default '[]'::jsonb,
- *   sells      jsonb       not null default '[]'::jsonb
+ *   quantity   numeric     not null default 0,
+ *   avg_price  numeric     not null default 0,
+ *   market     text        not null,
+ *   user_id    uuid        not null references auth.users(id) on delete cascade,
+ *   primary key (user_id, ticker)
  * );
  *
  * alter table public.assets enable row level security;
@@ -26,34 +26,53 @@
 import { supabase } from './supabase'
 import type { Asset } from '../pages/Portfolio'
 
+// ── 계산 헬퍼 (Portfolio.tsx와 동일 로직, 순환 import 방지) ──
+
+function _totalBuyQty(asset: Asset): number {
+  return asset.entries.reduce((s, e) => s + e.quantity, 0)
+}
+function _totalSellQty(asset: Asset): number {
+  return asset.sells.reduce((s, e) => s + e.quantity, 0)
+}
+function _holdingQty(asset: Asset): number {
+  return _totalBuyQty(asset) - _totalSellQty(asset)
+}
+function _avgBuyPrice(asset: Asset): number {
+  const qty = _totalBuyQty(asset)
+  const invested = asset.entries.reduce((s, e) => s + e.quantity * e.price, 0)
+  return qty > 0 ? invested / qty : 0
+}
+
 // ── Row ↔ Asset 변환 ────────────────────────────────────────
 
 function rowToAsset(row: Record<string, any>): Asset {
+  const now = new Date().toISOString()
   return {
-    id:        row.id,
+    id:        row.ticker,
     name:      row.name,
     market:    row.market,
-    createdAt: row.created_at,
-    entries:   Array.isArray(row.entries) ? row.entries : [],
-    sells:     Array.isArray(row.sells)   ? row.sells   : [],
+    createdAt: now,
+    // DB는 합산값(quantity, avg_price)만 저장 — 단일 entries로 복원
+    entries: Number(row.quantity) > 0
+      ? [{ id: row.ticker, quantity: Number(row.quantity), price: Number(row.avg_price), date: now }]
+      : [],
+    sells: [],
   }
 }
 
 function assetToRow(userId: string, asset: Asset) {
   return {
-    id:         asset.id,
-    user_id:    userId,
-    name:       asset.name,
-    market:     asset.market,
-    created_at: asset.createdAt,
-    entries:    asset.entries,
-    sells:      asset.sells,
+    ticker:    asset.id,
+    name:      asset.name,
+    quantity:  _holdingQty(asset),
+    avg_price: _avgBuyPrice(asset),
+    market:    asset.market,
+    user_id:   userId,
   }
 }
 
-// ── CRUD ────────────────────────────────────────────────────
+// ── 에러 로깅 ────────────────────────────────────────────────
 
-// Supabase 에러를 콘솔에 상세 출력 (400 원인 추적용)
 function logDbError(op: string, error: unknown) {
   const e = error as { code?: string; message?: string; details?: string; hint?: string }
   console.error(
@@ -65,42 +84,48 @@ function logDbError(op: string, error: unknown) {
   )
 }
 
+// ── CRUD ────────────────────────────────────────────────────
+
 export async function fetchAssets(userId: string): Promise<Asset[]> {
+  if (!userId) return []
   const { data, error } = await (supabase as any)
     .from('assets')
-    .select('*')
+    .select('ticker, name, quantity, avg_price, market, user_id')
     .eq('user_id', userId)
-    .order('created_at', { ascending: true })
+    .order('name', { ascending: true })
 
   if (error) { logDbError('fetchAssets', error); throw error }
   return (data ?? []).map(rowToAsset)
 }
 
 export async function upsertAsset(userId: string, asset: Asset): Promise<void> {
+  if (!userId) return
   const row = assetToRow(userId, asset)
   const { error } = await (supabase as any)
     .from('assets')
-    .upsert(row, { onConflict: 'id' })
+    .upsert(row, { onConflict: 'ticker,user_id' })
 
   if (error) { logDbError(`upsertAsset(${asset.name})`, error); throw error }
 }
 
-export async function deleteAsset(assetId: string): Promise<void> {
+export async function deleteAsset(assetId: string, userId: string): Promise<void> {
+  if (!userId) return
   const { error } = await (supabase as any)
     .from('assets')
     .delete()
-    .eq('id', assetId)
+    .eq('ticker', assetId)
+    .eq('user_id', userId)
 
   if (error) throw error
 }
 
 /** localStorage 데이터를 Supabase로 한 번에 마이그레이션 */
 export async function migrateLocalToDb(userId: string, assets: Asset[]): Promise<void> {
-  if (assets.length === 0) return
+  if (!userId || assets.length === 0) return
   const rows = assets.map(a => assetToRow(userId, a))
   const { error } = await (supabase as any)
     .from('assets')
-    .upsert(rows, { onConflict: 'id' })
+    .upsert(rows, { onConflict: 'ticker,user_id' })
 
   if (error) throw error
 }
