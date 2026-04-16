@@ -1,630 +1,738 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+/**
+ * Portfolio — 내 자산 관리
+ *
+ * - 자산 등록 폼 (종목명, 수량, 평균매수가, 시장 구분)
+ * - localStorage 영구 저장
+ * - 포트폴리오 위험 지수 카드 (시장 데이터 연동)
+ * - 시장별 색상 배지 (K-Stock/U-Stock/Crypto/Cash)
+ */
+
+import { useState, useEffect, useCallback } from 'react'
 import {
-  RefreshCw,
-  Pencil,
-  Check,
+  Plus,
   X,
-  TrendingUp,
-  TrendingDown,
-  AlertCircle,
-  ChevronUp,
-  ChevronDown,
-  BarChart2,
+  Trash2,
+  ShieldAlert,
+  PieChart,
+  ChevronRight,
+  AlertTriangle,
+  DollarSign,
+  Activity,
 } from 'lucide-react'
-import {
-  getCachedPrice,
-  setManualPrice,
-  getCacheStatus,
-  formatCacheAge,
-  statusColor,
-  type PriceData,
-  type CacheStatus,
-} from '../lib/price-cache'
-import { fetchPrices, type BatchResult } from '../lib/price-service'
 
-// ──────────────────────────────────────────
-// 데모 포지션 (Supabase 미연결 시 사용)
-// ──────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────
 
-type PositionMeta = {
-  ticker:       string
+export type MarketType = 'K-Stock' | 'U-Stock' | 'Crypto' | 'Cash'
+
+export interface Asset {
+  id:           string
   name:         string
-  exchange:     string
-  currency:     string
   quantity:     number
   avgBuyPrice:  number
+  market:       MarketType
+  createdAt:    string
 }
 
-const DEMO_POSITIONS: PositionMeta[] = []
+// ── Market config (all class strings are complete for Tailwind JIT) ───────────
 
-// ──────────────────────────────────────────
-// 유틸
-// ──────────────────────────────────────────
-
-function fmtPrice(price: number, currency: string) {
-  if (currency === 'KRW') return `₩${price.toLocaleString('ko-KR')}`
-  return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const MARKET_CONFIG: Record<MarketType, {
+  label:          string
+  emoji:          string
+  currency:       'KRW' | 'USD'
+  badgeCls:       string   // badge background + text + border
+  iconBgCls:      string   // asset card icon bg
+  barCls:         string   // composition progress bar
+  textCls:        string   // text color
+  cardBorderCls:  string   // summary card border
+}> = {
+  'K-Stock': {
+    label:         '국내주식',
+    emoji:         '🇰🇷',
+    currency:      'KRW',
+    badgeCls:      'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    iconBgCls:     'bg-blue-500/15',
+    barCls:        'bg-blue-500',
+    textCls:       'text-blue-400',
+    cardBorderCls: 'border-blue-500/30',
+  },
+  'U-Stock': {
+    label:         '미국주식',
+    emoji:         '🇺🇸',
+    currency:      'USD',
+    badgeCls:      'bg-red-500/20 text-red-400 border-red-500/30',
+    iconBgCls:     'bg-red-500/15',
+    barCls:        'bg-red-500',
+    textCls:       'text-red-400',
+    cardBorderCls: 'border-red-500/30',
+  },
+  'Crypto': {
+    label:         '가상자산',
+    emoji:         '₿',
+    currency:      'USD',
+    badgeCls:      'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    iconBgCls:     'bg-yellow-500/15',
+    barCls:        'bg-yellow-500',
+    textCls:       'text-yellow-400',
+    cardBorderCls: 'border-yellow-500/30',
+  },
+  'Cash': {
+    label:         '현금',
+    emoji:         '💵',
+    currency:      'KRW',
+    badgeCls:      'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    iconBgCls:     'bg-emerald-500/15',
+    barCls:        'bg-emerald-500',
+    textCls:       'text-emerald-400',
+    cardBorderCls: 'border-emerald-500/30',
+  },
 }
 
-function fmtPct(n: number) {
-  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
+// ── Risk level config ──────────────────────────────────────
+
+const RISK_LEVEL = {
+  low:     { label: '낮음',      color: 'text-emerald-400', ring: 'stroke-emerald-400', gradFrom: 'from-emerald-500/8'  },
+  medium:  { label: '보통',      color: 'text-amber-400',   ring: 'stroke-amber-400',   gradFrom: 'from-amber-500/8'    },
+  high:    { label: '높음',      color: 'text-orange-400',  ring: 'stroke-orange-400',  gradFrom: 'from-orange-500/8'   },
+  extreme: { label: '매우 높음', color: 'text-rose-400',    ring: 'stroke-rose-400',    gradFrom: 'from-rose-500/8'     },
+} as const
+
+// ── localStorage helpers ───────────────────────────────────
+
+const STORAGE_KEY = 'financy_assets'
+
+function loadAssets(): Asset[] {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') }
+  catch { return [] }
 }
 
-function calcPL(qty: number, avgBuy: number, current: number) {
-  const totalCost    = qty * avgBuy
-  const currentValue = qty * current
-  const pl           = currentValue - totalCost
-  const plPct        = totalCost !== 0 ? (pl / totalCost) * 100 : 0
-  return { totalCost, currentValue, pl, plPct }
+function saveAssets(assets: Asset[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(assets))
 }
 
-// ──────────────────────────────────────────
-// 서브 컴포넌트: 캐시 상태 배지
-// ──────────────────────────────────────────
+// ── Money formatter ────────────────────────────────────────
 
-function StatusDot({
-  status,
-  updatedAt,
-  source,
-}: {
-  status:    CacheStatus
-  updatedAt: string
-  source:    'api' | 'manual'
-}) {
-  const age   = formatCacheAge(updatedAt)
-  const label = source === 'manual' ? '수동 입력' : `API · ${age}`
+function fmtMoney(value: number, currency: 'KRW' | 'USD'): string {
+  return currency === 'KRW'
+    ? `₩${value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}`
+    : `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
 
+// ── MarketBadge ────────────────────────────────────────────
+
+function MarketBadge({ market }: { market: MarketType }) {
+  const { badgeCls, emoji, label } = MARKET_CONFIG[market]
   return (
-    <span
-      title={label}
-      className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${statusColor(status)}`}
-    />
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold flex-shrink-0 ${badgeCls}`}>
+      {emoji} {label}
+    </span>
   )
 }
 
-// ──────────────────────────────────────────
-// 서브 컴포넌트: 현재가 셀 (인라인 편집)
-// ──────────────────────────────────────────
+// ── Risk index calculation ─────────────────────────────────
 
-interface PriceCellProps {
-  ticker:    string
-  currency:  string
-  priceData: PriceData | null
-  loading:   boolean
-  error:     string | null
-  onSave:    (ticker: string, price: number) => void
-  alwaysShowEdit?: boolean
+interface MarketData {
+  fg:  { value: number; classification: string } | null
+  fx:  { code: string; rate: number; changePct: number }[]
+  tnx: { price: number; changePercent: number } | null
+  irx: { price: number; changePercent: number } | null
 }
 
-function PriceCell({ ticker, currency, priceData, loading, error, onSave, alwaysShowEdit }: PriceCellProps) {
-  const [editing,    setEditing]    = useState(false)
-  const [inputValue, setInputValue] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
+function calcRisk(assets: Asset[], data: MarketData) {
+  const { fg, fx, tnx, irx } = data
 
+  const krwRate   = fx.find(f => f.code === 'KRW')?.rate ?? 1_350
+  const krwChgAbs = Math.abs(fx.find(f => f.code === 'KRW')?.changePct ?? 0)
+  const fgValue   = fg?.value ?? 50
+  const inverted  = tnx && irx && irx.price > 0 && tnx.price < irx.price
+  const tnxUp     = tnx && tnx.changePercent > 0.3
+
+  // KRW-equivalent investment value per market
+  const byKrw: Record<MarketType, number> = { 'K-Stock': 0, 'U-Stock': 0, 'Crypto': 0, 'Cash': 0 }
+  let totalKrw = 0
+  for (const a of assets) {
+    const raw  = a.quantity * a.avgBuyPrice
+    const vKrw = MARKET_CONFIG[a.market].currency === 'KRW' ? raw : raw * krwRate
+    byKrw[a.market] += vKrw
+    totalKrw += vKrw
+  }
+  if (totalKrw === 0) return null
+
+  const w: Record<MarketType, number> = {
+    'K-Stock': byKrw['K-Stock'] / totalKrw,
+    'U-Stock': byKrw['U-Stock'] / totalKrw,
+    'Crypto':  byKrw['Crypto']  / totalKrw,
+    'Cash':    byKrw['Cash']    / totalKrw,
+  }
+
+  // Per-market risk scores (0–100)
+  const rCrypto  = Math.min(100, fgValue)
+  const rUStock  = Math.min(100, fgValue * 0.55 + krwChgAbs * 18 + (inverted ? 18 : 0) + (tnxUp ? 8 : 0))
+  const rKStock  = Math.min(100, fgValue * 0.35 + (inverted ? 22 : 0) + (tnxUp ? 12 : 0))
+  const rCash    = 8
+
+  const score = Math.round(
+    w['Crypto']  * rCrypto +
+    w['U-Stock'] * rUStock +
+    w['K-Stock'] * rKStock +
+    w['Cash']    * rCash,
+  )
+
+  const level: 'low' | 'medium' | 'high' | 'extreme' =
+    score < 30 ? 'low' : score < 55 ? 'medium' : score < 75 ? 'high' : 'extreme'
+
+  const desc = {
+    low:     '현재 포트폴리오는 상대적으로 안정적입니다.',
+    medium:  '일부 리스크 요인이 있습니다. 분산투자를 유지하세요.',
+    high:    '시장 변동성에 취약합니다. 리스크 관리가 필요합니다.',
+    extreme: '포트폴리오가 고위험 상태입니다. 방어적 비중 조절을 검토하세요.',
+  }[level]
+
+  // Context insights
+  const insights: string[] = []
+
+  if (w['U-Stock'] > 0.25) {
+    const kfx = fx.find(f => f.code === 'KRW')
+    if (kfx) {
+      const dir = kfx.changePct > 0
+        ? '원화 약세(환율 상승) — 달러 자산 원화가치 증가'
+        : '원화 강세(환율 하락) — 달러 자산 원화가치 감소'
+      insights.push(`미국주식 ${Math.round(w['U-Stock'] * 100)}% 비중 — ${dir} 중 (USD/KRW ${kfx.rate.toFixed(0)}, ${kfx.changePct >= 0 ? '+' : ''}${kfx.changePct.toFixed(2)}%)`)
+    }
+  }
+
+  if (w['Crypto'] > 0.15 && fg) {
+    const mood =
+      fgValue > 65 ? '탐욕 과열 — 고점 경계 필요' :
+      fgValue < 35 ? '공포 저점 — 매수 기회 탐색 가능' :
+                     '중립 — 관망 권장'
+    insights.push(`가상자산 ${Math.round(w['Crypto'] * 100)}% 비중 — 공포/탐욕 ${fgValue}점 (${mood})`)
+  }
+
+  if (inverted) {
+    insights.push('장단기 금리 역전 지속 — 경기 침체 선행 신호, 방어적 포트폴리오 유지 권장')
+  }
+
+  if (w['Cash'] > 0.35) {
+    insights.push(`현금 비중 ${Math.round(w['Cash'] * 100)}% — 인플레이션 대비 실질수익률 점검 권장`)
+  }
+
+  return { score, level, desc, insights, weights: w, byKrw, totalKrw }
+}
+
+// ── RiskIndexCard ──────────────────────────────────────────
+
+function RiskIndexCard({ assets }: { assets: Asset[] }) {
+  const [mkt,     setMkt]     = useState<MarketData>({ fg: null, fx: [], tnx: null, irx: null })
+  const [loading, setLoading] = useState(true)
+  const [noApi,   setNoApi]   = useState(false)
+
+  // Fetch market data once assets become non-empty
+  const hasAssets = assets.length > 0
   useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
-    }
-  }, [editing])
+    if (!hasAssets) return
+    let cancelled = false
+    setLoading(true)
 
-  const startEdit = () => {
-    setInputValue(priceData ? String(priceData.price) : '')
-    setEditing(true)
-  }
+    Promise.allSettled([
+      fetch('/api/fear-greed').then(r => r.json()),
+      fetch('/api/exchange-rates').then(r => r.json()),
+      fetch('/api/quote?ticker=^TNX&exchange=NASDAQ').then(r => r.json()),
+      fetch('/api/quote?ticker=^IRX&exchange=NASDAQ').then(r => r.json()),
+    ]).then(([fgR, fxR, tnxR, irxR]) => {
+      if (cancelled) return
+      const d: MarketData = { fg: null, fx: [], tnx: null, irx: null }
+      if (fgR.status  === 'fulfilled' && !fgR.value.error)   d.fg  = fgR.value
+      if (fxR.status  === 'fulfilled' && !fxR.value.error)   d.fx  = fxR.value.rates ?? []
+      if (tnxR.status === 'fulfilled' && tnxR.value?.price)  d.tnx = tnxR.value
+      if (irxR.status === 'fulfilled' && irxR.value?.price)  d.irx = irxR.value
+      const anyData = d.fg !== null || d.fx.length > 0 || d.tnx !== null
+      setMkt(d)
+      setNoApi(!anyData)
+      setLoading(false)
+    })
 
-  const save = () => {
-    const parsed = parseFloat(inputValue.replace(/,/g, ''))
-    if (!isNaN(parsed) && parsed > 0) {
-      onSave(ticker, parsed)
-    }
-    setEditing(false)
-  }
+    return () => { cancelled = true }
+  }, [hasAssets])
 
-  const cancel = () => setEditing(false)
+  if (!hasAssets) return null
 
-  // ── 편집 모드 ──
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <div className="relative">
-          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
-            {currency === 'KRW' ? '₩' : '$'}
-          </span>
-          <input
-            ref={inputRef}
-            type="number"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter')  save()
-              if (e.key === 'Escape') cancel()
-            }}
-            placeholder="0"
-            className="w-28 bg-gray-800 border border-brand-500 focus:ring-1 focus:ring-brand-500/30
-                       rounded-lg pl-5 pr-2 py-1 text-sm text-gray-100 font-mono outline-none"
-          />
-        </div>
-        <button
-          onClick={save}
-          title="저장 (Enter)"
-          className="w-6 h-6 rounded-md bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400
-                     flex items-center justify-center transition-colors"
-        >
-          <Check className="w-3 h-3" />
-        </button>
-        <button
-          onClick={cancel}
-          title="취소 (Esc)"
-          className="w-6 h-6 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-400
-                     flex items-center justify-center transition-colors"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
-    )
-  }
+  const result = !loading ? calcRisk(assets, mkt) : null
+  const score  = result?.score ?? 0
+  const level  = result?.level ?? 'low'
+  const rc     = RISK_LEVEL[level]
 
-  // ── 로딩 ──
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="w-16 h-4 bg-gray-700 rounded animate-pulse" />
-      </div>
-    )
-  }
+  const RADIUS = 48
+  const CIRC   = 2 * Math.PI * RADIUS
+  const dash   = CIRC * (score / 100)
 
-  // ── 오류 / 미입력 ──
-  if (!priceData) {
-    return (
-      <div className="flex items-center gap-2">
-        {error ? (
-          <span title={error} className="flex items-center gap-1 text-xs text-red-400 cursor-help">
-            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="max-w-[90px] truncate">{error}</span>
-          </span>
-        ) : (
-          <span className="text-xs text-gray-600">—</span>
-        )}
-        <button
-          onClick={startEdit}
-          className="text-xs text-brand-400 hover:text-brand-300 font-medium transition-colors"
-        >
-          직접 입력
-        </button>
-      </div>
-    )
-  }
-
-  // ── 정상 표시 ──
-  const status = getCacheStatus(priceData)
+  const showFx = result && result.weights['U-Stock'] > 0.25 && mkt.fx.length > 0
+  const showFg = result && result.weights['Crypto'] > 0.15 && mkt.fg !== null
 
   return (
-    <div className="flex items-center gap-2 group">
-      <span className="font-mono text-sm text-gray-100">
-        {fmtPrice(priceData.price, priceData.currency)}
-      </span>
+    <div className={`card bg-gradient-to-br ${rc.gradFrom} to-transparent space-y-4`}>
 
-      {/* 등락 표시 (API 데이터일 때만) */}
-      {priceData.source === 'api' && priceData.changePercent !== 0 && (
-        <span className={`text-xs font-medium ${priceData.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-          {priceData.changePercent >= 0 ? <ChevronUp className="inline w-3 h-3" /> : <ChevronDown className="inline w-3 h-3" />}
-          {Math.abs(priceData.changePercent).toFixed(2)}%
-        </span>
+      {/* Title row */}
+      <div className="flex items-center gap-2">
+        <ShieldAlert className="w-4 h-4 text-gray-400" />
+        <span className="text-sm font-semibold text-gray-200">현재 포트폴리오 위험 지수</span>
+        {loading && <span className="ml-auto text-[10px] text-gray-600 animate-pulse">분석 중…</span>}
+        {!loading && noApi && (
+          <span className="ml-auto text-[10px] text-amber-600">시장 데이터 없음 (vercel dev 실행 필요)</span>
+        )}
+      </div>
+
+      {/* Ring + info */}
+      <div className="flex items-center gap-5">
+
+        {/* SVG ring */}
+        <div className="relative flex-shrink-0" style={{ width: 108, height: 108 }}>
+          <svg width="108" height="108" viewBox="0 0 120 120" className="-rotate-90">
+            <circle cx="60" cy="60" r={RADIUS} fill="none" stroke="#1f2937" strokeWidth="12" />
+            {!loading && (
+              <circle
+                cx="60" cy="60" r={RADIUS}
+                fill="none" strokeWidth="12" strokeLinecap="round"
+                className={`${rc.ring} transition-all duration-700`}
+                strokeDasharray={`${dash} ${CIRC}`}
+              />
+            )}
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            {loading
+              ? <div className="w-9 h-9 rounded-full bg-gray-800 animate-pulse" />
+              : <>
+                  <span className={`text-2xl font-bold mono ${rc.color}`}>{score}</span>
+                  <span className="text-[10px] text-gray-600">/ 100</span>
+                </>
+            }
+          </div>
+        </div>
+
+        {/* Text info + priority highlights */}
+        <div className="flex-1 min-w-0 space-y-2.5">
+          {loading
+            ? <div className="space-y-2">
+                <div className="h-5 w-16 bg-gray-800 rounded animate-pulse" />
+                <div className="h-3 w-full bg-gray-800 rounded animate-pulse" />
+                <div className="h-3 w-3/4 bg-gray-800 rounded animate-pulse" />
+              </div>
+            : <>
+                <div>
+                  <p className={`text-xl font-bold ${rc.color}`}>{rc.label}</p>
+                  <p className="text-xs text-gray-500 leading-snug mt-0.5">{result?.desc}</p>
+                </div>
+
+                {/* U-Stock → exchange rate highlight */}
+                {showFx && (() => {
+                  const kfx = mkt.fx.find(f => f.code === 'KRW')!
+                  return (
+                    <div className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2">
+                      <DollarSign className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold text-red-300">환율 변동 — 자산가치 영향 주시</p>
+                        <p className="text-[10px] text-red-400/80 mono">
+                          USD/KRW {kfx.rate.toFixed(0)}
+                          {'  '}
+                          ({kfx.changePct >= 0 ? '+' : ''}{kfx.changePct.toFixed(2)}%)
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Crypto → fear/greed highlight */}
+                {showFg && (() => {
+                  const v = mkt.fg!.value
+                  const cls =
+                    v > 65 ? 'bg-rose-500/10 border-rose-500/20 text-rose-300 [&_p]:text-rose-400/80' :
+                    v < 35 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300 [&_p]:text-emerald-400/80' :
+                             'bg-amber-500/10 border-amber-500/20 text-amber-300 [&_p]:text-amber-400/80'
+                  return (
+                    <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${cls}`}>
+                      <Activity className="w-3.5 h-3.5 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold">공포/탐욕 지수 — 가상자산 직결 신호</p>
+                        <p className="text-[10px] mono">{v}점 — {mkt.fg!.classification}</p>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </>
+          }
+        </div>
+      </div>
+
+      {/* Composition bar */}
+      {result && result.totalKrw > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex h-2 rounded-full overflow-hidden gap-px">
+            {(['K-Stock', 'U-Stock', 'Crypto', 'Cash'] as MarketType[]).map(m => {
+              const pct = result.weights[m] * 100
+              if (pct < 0.5) return null
+              return (
+                <div
+                  key={m}
+                  className={`h-full ${MARKET_CONFIG[m].barCls} opacity-75 transition-all duration-500`}
+                  style={{ width: `${pct}%` }}
+                />
+              )
+            })}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+            {(['K-Stock', 'U-Stock', 'Crypto', 'Cash'] as MarketType[]).map(m => {
+              const pct = result.weights[m] * 100
+              if (pct < 1) return null
+              return (
+                <span key={m} className={`text-[10px] ${MARKET_CONFIG[m].textCls}`}>
+                  {MARKET_CONFIG[m].label} {Math.round(pct)}%
+                </span>
+              )
+            })}
+          </div>
+        </div>
       )}
 
-      {/* 캐시 상태 점 */}
-      <StatusDot status={status} updatedAt={priceData.updatedAt} source={priceData.source} />
+      {/* Insights list */}
+      {result && result.insights.length > 0 && (
+        <div className="space-y-1.5 border-t border-gray-800 pt-3">
+          {result.insights.map((insight, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <ChevronRight className="w-3 h-3 mt-0.5 flex-shrink-0 text-gray-600" />
+              <p className="text-xs text-gray-400 leading-snug">{insight}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-      {/* 편집 버튼 — 모바일에서 항상 표시, 데스크톱은 hover */}
+// ── AddAssetForm ───────────────────────────────────────────
+
+const MARKET_TYPES: MarketType[] = ['K-Stock', 'U-Stock', 'Crypto', 'Cash']
+
+function AddAssetForm({
+  onAdd,
+  onClose,
+}: {
+  onAdd:   (data: Omit<Asset, 'id' | 'createdAt'>) => void
+  onClose: () => void
+}) {
+  const [name,   setName]   = useState('')
+  const [qty,    setQty]    = useState('')
+  const [avgBuy, setAvgBuy] = useState('')
+  const [market, setMarket] = useState<MarketType>('K-Stock')
+  const [err,    setErr]    = useState('')
+
+  const cfg = MARKET_CONFIG[market]
+
+  const totalPreview = (() => {
+    const q = parseFloat(qty)
+    const p = parseFloat(avgBuy)
+    return !isNaN(q) && !isNaN(p) && q > 0 && p > 0 ? q * p : null
+  })()
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setErr('')
+    const q = parseFloat(qty)
+    const p = parseFloat(avgBuy)
+    if (!name.trim())       { setErr('종목명을 입력해주세요.'); return }
+    if (isNaN(q) || q <= 0) { setErr('수량은 0보다 큰 숫자를 입력해주세요.'); return }
+    if (isNaN(p) || p <= 0) { setErr('평균 매수가는 0보다 큰 숫자를 입력해주세요.'); return }
+    onAdd({ name: name.trim(), quantity: q, avgBuyPrice: p, market })
+    onClose()
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div className="w-full max-w-md bg-gray-900 border border-gray-700/80 rounded-t-2xl sm:rounded-2xl shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5">
+          <h2 className="text-base font-semibold text-white">내 자산 등록</h2>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-400 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+
+          {/* Market selector */}
+          <div>
+            <p className="text-xs text-gray-500 mb-2">시장 선택</p>
+            <div className="grid grid-cols-4 gap-2">
+              {MARKET_TYPES.map(m => {
+                const c = MARKET_CONFIG[m]
+                const active = market === m
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMarket(m)}
+                    className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-center transition-all
+                      ${active
+                        ? `${c.badgeCls}`
+                        : 'bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-600'
+                      }`}
+                  >
+                    <span className="text-xl leading-none">{c.emoji}</span>
+                    <span className="text-[10px] font-medium leading-tight">{c.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Name */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">종목명</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder={
+                market === 'Cash'    ? '예) CMA, 보통예금, 달러예금' :
+                market === 'Crypto'  ? '예) 비트코인, 이더리움, BTC' :
+                market === 'U-Stock' ? '예) 애플, 테슬라, AAPL'     :
+                                       '예) 삼성전자, SK하이닉스'
+              }
+              className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20
+                         rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder:text-gray-600 outline-none transition-colors"
+            />
+          </div>
+
+          {/* Quantity + AvgBuy price */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1.5">
+                보유 수량{market === 'Crypto' ? ' (개)' : market === 'Cash' ? '' : ' (주)'}
+              </label>
+              <input
+                type="number" min="0" step="any"
+                value={qty}
+                onChange={e => setQty(e.target.value)}
+                placeholder="0"
+                className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20
+                           rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder:text-gray-600 outline-none transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1.5">
+                평균 매수가 ({cfg.currency})
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none select-none">
+                  {cfg.currency === 'KRW' ? '₩' : '$'}
+                </span>
+                <input
+                  type="number" min="0" step="any"
+                  value={avgBuy}
+                  onChange={e => setAvgBuy(e.target.value)}
+                  placeholder="0"
+                  className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20
+                             rounded-xl pl-8 pr-4 py-2.5 text-sm text-gray-100 placeholder:text-gray-600 outline-none transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Total preview */}
+          {totalPreview !== null && (
+            <div className="flex items-center justify-between bg-gray-800/70 rounded-xl px-4 py-2.5">
+              <span className="text-xs text-gray-500">총 투자금액 미리보기</span>
+              <span className="text-sm font-bold text-gray-200 mono">
+                {fmtMoney(totalPreview, cfg.currency)}
+              </span>
+            </div>
+          )}
+
+          {/* Error */}
+          {err && (
+            <div className="flex items-center gap-1.5 text-xs text-rose-400">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              {err}
+            </div>
+          )}
+
+          <button type="submit" className="w-full btn-primary py-3 font-semibold">
+            등록하기
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── AssetCard ──────────────────────────────────────────────
+
+function AssetCard({ asset, onDelete }: { asset: Asset; onDelete: (id: string) => void }) {
+  const cfg      = MARKET_CONFIG[asset.market]
+  const total    = asset.quantity * asset.avgBuyPrice
+  const unitWord = asset.market === 'Cash' ? '' : asset.market === 'Crypto' ? '개' : '주'
+
+  return (
+    <div className="card card-hover flex items-center gap-3">
+
+      {/* Market icon */}
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${cfg.iconBgCls}`}>
+        <span className="text-xl leading-none">{cfg.emoji}</span>
+      </div>
+
+      {/* Name + badge + detail */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+          <p className="text-sm font-semibold text-gray-100 truncate">{asset.name}</p>
+          <MarketBadge market={asset.market} />
+        </div>
+        <p className="text-xs text-gray-500 mono">
+          {asset.quantity.toLocaleString()}{unitWord}
+          {' × '}
+          {fmtMoney(asset.avgBuyPrice, cfg.currency)}
+        </p>
+      </div>
+
+      {/* Total value */}
+      <div className="text-right flex-shrink-0">
+        <p className="text-sm font-semibold text-gray-200 mono">{fmtMoney(total, cfg.currency)}</p>
+        <p className="text-[10px] text-gray-600 mt-0.5">투자금액</p>
+      </div>
+
+      {/* Delete */}
       <button
-        onClick={startEdit}
-        title="수동으로 현재가 입력"
-        className={`w-5 h-5 rounded-md hover:bg-gray-700
-                   flex items-center justify-center text-gray-500 hover:text-gray-300
-                   transition-all duration-150 ${alwaysShowEdit ? 'opacity-60' : 'opacity-0 group-hover:opacity-100'}`}
+        onClick={() => onDelete(asset.id)}
+        title="삭제"
+        className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0
+                   text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
       >
-        <Pencil className="w-3 h-3" />
+        <Trash2 className="w-3.5 h-3.5" />
       </button>
     </div>
   )
 }
 
-// ──────────────────────────────────────────
-// 메인 컴포넌트
-// ──────────────────────────────────────────
-
-type PriceState = {
-  data:    PriceData | null
-  loading: boolean
-  error:   string | null
-}
+// ── Main component ─────────────────────────────────────────
 
 export default function Portfolio() {
-  const [positions]                        = useState<PositionMeta[]>(DEMO_POSITIONS)
-  const [prices, setPrices]                = useState<Record<string, PriceState>>({})
-  const [refreshing, setRefreshing]        = useState(false)
-  const [lastRefreshed, setLastRefreshed]  = useState<Date | null>(null)
+  const [assets,   setAssets]   = useState<Asset[]>(() => loadAssets())
+  const [showForm, setShowForm] = useState(false)
 
-  // ── 초기 로드: 캐시 채우기 ──
-  useEffect(() => {
-    const initial: Record<string, PriceState> = {}
-    positions.forEach((p) => {
-      const cached = getCachedPrice(p.ticker)
-      initial[p.ticker] = { data: cached, loading: false, error: null }
-    })
-    setPrices(initial)
-  }, [positions])
+  // Persist on every change
+  useEffect(() => { saveAssets(assets) }, [assets])
 
-  // ── 단일 티커 수동 저장 ──
-  const handleManualSave = useCallback((ticker: string, price: number) => {
-    const pos      = positions.find((p) => p.ticker === ticker)
-    const currency = pos?.currency ?? 'KRW'
-    const data     = setManualPrice(ticker, price, currency)
-    setPrices((prev) => ({
+  const handleAdd = useCallback((data: Omit<Asset, 'id' | 'createdAt'>) => {
+    setAssets(prev => [
       ...prev,
-      [ticker]: { data, loading: false, error: null },
-    }))
-  }, [positions])
+      {
+        ...data,
+        id:        `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        createdAt: new Date().toISOString(),
+      },
+    ])
+  }, [])
 
-  // ── 전체 새로고침 ──
-  const handleRefreshAll = useCallback(async () => {
-    setRefreshing(true)
+  const handleDelete = useCallback((id: string) => {
+    if (!window.confirm('이 자산을 삭제할까요?')) return
+    setAssets(prev => prev.filter(a => a.id !== id))
+  }, [])
 
-    setPrices((prev) => {
-      const next = { ...prev }
-      positions.forEach((p) => {
-        next[p.ticker] = { ...next[p.ticker], loading: true, error: null, data: prev[p.ticker]?.data ?? null }
-      })
-      return next
+  // Market group summaries
+  const marketGroups = (MARKET_TYPES as MarketType[])
+    .map(m => {
+      const group = assets.filter(a => a.market === m)
+      if (group.length === 0) return null
+      return {
+        market: m,
+        count:  group.length,
+        total:  group.reduce((s, a) => s + a.quantity * a.avgBuyPrice, 0),
+      }
     })
-
-    const results: BatchResult[] = await fetchPrices(
-      positions.map((p) => ({ ticker: p.ticker, exchange: p.exchange })),
-    )
-
-    setPrices((prev) => {
-      const next = { ...prev }
-      results.forEach((r) => {
-        next[r.ticker] = { data: r.data, loading: false, error: r.error }
-      })
-      return next
-    })
-
-    setLastRefreshed(new Date())
-    setRefreshing(false)
-  }, [positions])
-
-  // ──────────────────────────────────────────
-  // 요약 계산
-  // ──────────────────────────────────────────
-
-  const krwPositions = positions.filter((p) => p.currency === 'KRW')
-  const usdPositions = positions.filter((p) => p.currency === 'USD')
-
-  function summarize(ps: PositionMeta[]) {
-    let totalCost = 0, totalValue = 0, hasPrices = false
-    ps.forEach((p) => {
-      const price = prices[p.ticker]?.data?.price
-      totalCost += p.quantity * p.avgBuyPrice
-      if (price != null) { totalValue += p.quantity * price; hasPrices = true }
-    })
-    const pl    = totalValue - totalCost
-    const plPct = totalCost ? (pl / totalCost) * 100 : 0
-    return { totalCost, totalValue: hasPrices ? totalValue : null, pl, plPct }
-  }
-
-  const krw = summarize(krwPositions)
-  const usd = summarize(usdPositions)
-
-  const apiCount    = Object.values(prices).filter((s) => s.data?.source === 'api').length
-  const manualCount = Object.values(prices).filter((s) => s.data?.source === 'manual').length
-  const noDataCount = Object.values(prices).filter((s) => !s.data && !s.loading).length
-
-  // ──────────────────────────────────────────
-  // 렌더
-  // ──────────────────────────────────────────
+    .filter(Boolean) as { market: MarketType; count: number; total: number }[]
 
   return (
-    <div className="p-4 md:p-8 space-y-4 md:space-y-6">
+    <div className="p-4 md:p-8 space-y-4 md:space-y-5">
 
-      {/* ── 헤더 ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-white">포트폴리오</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {lastRefreshed
-              ? `마지막 새로고침: ${formatCacheAge(lastRefreshed.toISOString())}`
-              : '캐시된 가격을 표시합니다'}
+            {assets.length === 0
+              ? '자산을 등록하면 위험 지수를 분석합니다'
+              : `${assets.length}개 자산 · 브라우저에 저장됨`}
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 범례 — 모바일에서 숨김 */}
-          <div className="hidden sm:flex items-center gap-3 text-xs text-gray-500 mr-2">
-            {[
-              ['bg-emerald-400', 'API'],
-              ['bg-amber-400',   '오래됨'],
-              ['bg-blue-400',    '수동'],
-              ['bg-red-400',     '만료'],
-            ].map(([color, label]) => (
-              <span key={label} className="flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${color}`} />
-                {label}
-              </span>
-            ))}
-          </div>
-
-          <button
-            onClick={handleRefreshAll}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 btn-primary text-sm disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? '조회 중…' : '모두 새로고침'}
-          </button>
-        </div>
+        <button
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-1.5 btn-primary text-sm"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          자산 등록
+        </button>
       </div>
 
-      {/* ── 빈 상태 ── */}
-      {positions.length === 0 && (
+      {/* ── Risk Index Card — 상단 배치 ── */}
+      <RiskIndexCard assets={assets} />
+
+      {/* ── Market group summary cards ── */}
+      {marketGroups.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {marketGroups.map(({ market, count, total }) => {
+            const cfg = MARKET_CONFIG[market]
+            return (
+              <div
+                key={market}
+                className={`bg-gray-900 rounded-2xl p-4 border ${cfg.cardBorderCls}`}
+              >
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="text-base leading-none">{cfg.emoji}</span>
+                  <span className={`text-[10px] font-semibold ${cfg.textCls}`}>{cfg.label}</span>
+                </div>
+                <p className={`text-sm font-bold mono ${cfg.textCls}`}>
+                  {fmtMoney(total, cfg.currency)}
+                </p>
+                <p className="text-[10px] text-gray-600 mt-0.5">{count}개 종목</p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Asset list or empty state ── */}
+      {assets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
           <div className="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center">
-            <BarChart2 className="w-8 h-8 text-gray-600" />
+            <PieChart className="w-8 h-8 text-gray-600" />
           </div>
           <div>
             <p className="text-gray-300 font-semibold">포트폴리오가 비어 있습니다</p>
-            <p className="text-gray-600 text-sm mt-1">아직 등록된 종목이 없습니다.</p>
+            <p className="text-gray-600 text-sm mt-1">+ 자산 등록 버튼을 눌러 종목을 추가하세요</p>
           </div>
+          <button
+            onClick={() => setShowForm(true)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            첫 자산 등록하기
+          </button>
         </div>
-      )}
-
-      {/* ── 요약 카드 — 종목이 있을 때만 렌더 ── */}
-      {positions.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <SummaryCard
-          title="국내 종목 (KRW)"
-          totalCost={krw.totalCost}
-          totalValue={krw.totalValue}
-          pl={krw.pl}
-          plPct={krw.plPct}
-          currency="KRW"
-          positions={krwPositions}
-        />
-        <SummaryCard
-          title="해외 종목 (USD)"
-          totalCost={usd.totalCost}
-          totalValue={usd.totalValue}
-          pl={usd.pl}
-          plPct={usd.plPct}
-          currency="USD"
-          positions={usdPositions}
-        />
-      </div>}
-
-      {/* ── 포지션 테이블 (데스크톱) / 카드 (모바일) ── */}
-      {positions.length > 0 && <div className="card !p-0 overflow-hidden">
-
-        {/* ── 데스크톱 테이블 헤더 (md 이상) ── */}
-        <div className="hidden md:grid grid-cols-[2fr_1fr_1.2fr_1.6fr_1.2fr_1fr] gap-4 px-5 py-3
-                        border-b border-gray-800 bg-gray-900/80">
-          {['종목', '수량', '평균단가', '현재가', '평가금액', '수익률'].map((h) => (
-            <p key={h} className="stat-label">{h}</p>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">보유 자산</p>
+          {assets.map(asset => (
+            <AssetCard key={asset.id} asset={asset} onDelete={handleDelete} />
           ))}
         </div>
-
-        {positions.map((pos) => {
-          const ps      = prices[pos.ticker] ?? { data: null, loading: false, error: null }
-          const current = ps.data?.price ?? null
-          const { currentValue, pl, plPct } =
-            current != null ? calcPL(pos.quantity, pos.avgBuyPrice, current)
-                            : { currentValue: 0, pl: 0, plPct: 0 }
-          const hasPrice  = current != null
-          const isProfit  = pl >= 0
-
-          return (
-            <div key={pos.ticker} className={`border-b border-gray-800/60 last:border-0 transition-colors duration-150 ${
-              hasPrice ? (isProfit ? 'hover:bg-emerald-950/20' : 'hover:bg-red-950/20') : 'hover:bg-gray-800/40'
-            }`}>
-
-              {/* ── 데스크톱 행 ── */}
-              <div className="hidden md:grid grid-cols-[2fr_1fr_1.2fr_1.6fr_1.2fr_1fr] gap-4 px-5 py-4">
-                {/* 종목 */}
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-gray-800 flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs font-bold text-gray-300">{pos.ticker.slice(0, 2)}</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-100 leading-tight">{pos.name}</p>
-                    <p className="text-xs text-gray-500 font-mono">{pos.ticker} · {pos.exchange}</p>
-                  </div>
-                </div>
-                {/* 수량 */}
-                <div className="flex items-center">
-                  <span className="text-sm text-gray-300 font-mono">{pos.quantity.toLocaleString()}</span>
-                </div>
-                {/* 평균단가 */}
-                <div className="flex items-center">
-                  <span className="text-sm text-gray-400 font-mono">{fmtPrice(pos.avgBuyPrice, pos.currency)}</span>
-                </div>
-                {/* 현재가 */}
-                <div className="flex items-center">
-                  <PriceCell
-                    ticker={pos.ticker}
-                    currency={pos.currency}
-                    priceData={ps.data}
-                    loading={ps.loading}
-                    error={ps.error}
-                    onSave={handleManualSave}
-                  />
-                </div>
-                {/* 평가금액 */}
-                <div className="flex items-center">
-                  {hasPrice
-                    ? <span className="text-sm text-gray-200 font-mono">{fmtPrice(currentValue, pos.currency)}</span>
-                    : <span className="text-sm text-gray-600">—</span>}
-                </div>
-                {/* 수익률 */}
-                <div className="flex items-center">
-                  {hasPrice ? (
-                    <div className={`flex items-center gap-1 text-sm font-semibold ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {isProfit ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                      <span>{fmtPct(plPct)}</span>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-gray-600">—</span>
-                  )}
-                </div>
-              </div>
-
-              {/* ── 모바일 카드 ── */}
-              <div className="md:hidden px-4 py-3.5 space-y-3">
-                {/* 상단: 종목 정보 + 수익률 */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-gray-800 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-bold text-gray-300">{pos.ticker.slice(0, 2)}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-100 truncate">{pos.name}</p>
-                      <p className="text-xs text-gray-500 font-mono">{pos.ticker} · {pos.exchange}</p>
-                    </div>
-                  </div>
-                  {hasPrice ? (
-                    <div className={`flex flex-col items-end flex-shrink-0 text-sm font-bold ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
-                      <div className="flex items-center gap-0.5">
-                        {isProfit ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                        {fmtPct(plPct)}
-                      </div>
-                      <span className="text-xs font-medium text-gray-500">
-                        {pl >= 0 ? '+' : ''}{fmtPrice(pl, pos.currency)}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-gray-600 flex-shrink-0">—</span>
-                  )}
-                </div>
-
-                {/* 하단: 수량/단가/현재가/평가금액 */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                  <div>
-                    <p className="text-xs text-gray-600 mb-0.5">수량</p>
-                    <p className="text-sm text-gray-300 font-mono">{pos.quantity.toLocaleString()}주</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 mb-0.5">평균단가</p>
-                    <p className="text-sm text-gray-400 font-mono">{fmtPrice(pos.avgBuyPrice, pos.currency)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 mb-0.5">현재가</p>
-                    <PriceCell
-                      ticker={pos.ticker}
-                      currency={pos.currency}
-                      priceData={ps.data}
-                      loading={ps.loading}
-                      error={ps.error}
-                      onSave={handleManualSave}
-                      alwaysShowEdit
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 mb-0.5">평가금액</p>
-                    {hasPrice
-                      ? <p className="text-sm text-gray-200 font-mono">{fmtPrice(currentValue, pos.currency)}</p>
-                      : <p className="text-sm text-gray-600">—</p>}
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )
-        })}
-      </div>}
-
-      {/* ── 통계 바 ── */}
-      {positions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-gray-600">
-          <span>{positions.length}개 종목</span>
-          {apiCount > 0    && <span className="text-emerald-600">API {apiCount}개</span>}
-          {manualCount > 0 && <span className="text-blue-600">수동 {manualCount}개</span>}
-          {noDataCount > 0 && <span className="text-gray-600">미입력 {noDataCount}개</span>}
-          <span className="sm:ml-auto">캐시 TTL: API 24시간 / 수동 무제한</span>
-        </div>
       )}
 
-    </div>
-  )
-}
-
-// ──────────────────────────────────────────
-// 서브 컴포넌트: 요약 카드
-// ──────────────────────────────────────────
-
-function SummaryCard({
-  title,
-  totalCost,
-  totalValue,
-  pl,
-  plPct,
-  currency,
-  positions,
-}: {
-  title:      string
-  totalCost:  number
-  totalValue: number | null
-  pl:         number
-  plPct:      number
-  currency:   string
-  positions:  PositionMeta[]
-}) {
-  const hasData  = totalValue !== null
-  const isProfit = pl >= 0
-
-  return (
-    <div className="card space-y-3">
-      <p className="stat-label">{title}</p>
-
-      <div className="grid grid-cols-3 gap-3">
-        <div>
-          <p className="text-xs text-gray-600 mb-1">투자금액</p>
-          <p className="text-sm md:text-base font-semibold text-gray-200 font-mono">
-            {fmtPrice(totalCost, currency)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-600 mb-1">평가금액</p>
-          <p className={`text-sm md:text-base font-semibold font-mono ${hasData ? 'text-gray-200' : 'text-gray-600'}`}>
-            {hasData ? fmtPrice(totalValue!, currency) : '—'}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-600 mb-1">평가손익</p>
-          {hasData ? (
-            <div className={`flex items-center gap-1 ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
-              {isProfit ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              <span className="text-sm font-semibold font-mono">{fmtPct(plPct)}</span>
-            </div>
-          ) : (
-            <span className="text-sm md:text-base font-semibold text-gray-600">—</span>
-          )}
-        </div>
-      </div>
-
-      {/* 종목 미니 바 */}
-      <div className="flex gap-1 h-1">
-        {positions.map((p, i) => (
-          <div
-            key={p.ticker}
-            className={`h-full rounded-full flex-1 ${
-              ['bg-brand-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500'][i % 4]
-            }`}
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1">
-        {positions.map((p) => (
-          <span key={p.ticker} className="text-xs text-gray-500">{p.name}</span>
-        ))}
-      </div>
+      {/* Form modal */}
+      {showForm && <AddAssetForm onAdd={handleAdd} onClose={() => setShowForm(false)} />}
     </div>
   )
 }
