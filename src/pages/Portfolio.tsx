@@ -759,8 +759,6 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
   const realPL   = totalRealizedPL(asset)
   const hasSells = asset.sells.length > 0
 
-  const collapse = () => { setExpanded(false); setMode('none') }
-
   const handleDeleteEntry = (entryId: string) => {
     const remaining = asset.entries.filter(e => e.id !== entryId)
     if (remaining.length === 0) {
