@@ -10,7 +10,7 @@ import {
 } from 'recharts'
 import {
   BarChart2, RefreshCw,
-  Info, ChevronDown, ChevronUp, AlertCircle, TrendingUp, TrendingDown,
+  AlertCircle, TrendingUp, TrendingDown,
 } from 'lucide-react'
 import type { Asset, MarketType } from './Portfolio'
 import { fetchAssets } from '../lib/db'
@@ -196,11 +196,11 @@ export default function Analytics({ userId }: { userId: string | null }) {
   const [tickers,       setTickers]       = useState<Record<string, string>>({})
   const [livePrices,    setLivePrices]    = useState<Record<string, PriceResult | 'error' | null>>({})
   const [fetchingIds,   setFetchingIds]   = useState<Set<string>>(new Set())
-  const [showLive,      setShowLive]      = useState(false)
   const [fundamentals,  setFundamentals]  = useState<Map<string, Fundamentals>>(new Map())
   const [fundLoading,   setFundLoading]   = useState(false)
 
-  const tickersRef = useRef(tickers)
+  const tickersRef      = useRef(tickers)
+  const hasAutoFetched  = useRef(false)
   useEffect(() => { tickersRef.current = tickers }, [tickers])
 
   // ── 자산 로드 + 환율 조회 ───────────────────────────────────
@@ -256,6 +256,19 @@ export default function Analytics({ userId }: { userId: string | null }) {
     setLivePrices(prev => ({ ...prev, [assetId]: result ?? 'error' }))
     setFetchingIds(prev => { const s = new Set(prev); s.delete(assetId); return s })
   }, [])
+
+  // ── 마운트 시 자동 가격 조회 ───────────────────────────────
+  useEffect(() => {
+    if (loading || assets.length === 0 || hasAutoFetched.current) return
+    hasAutoFetched.current = true
+    const tickerMap = tickersRef.current
+    assets
+      .filter(a => a.market !== 'Cash' && holdingQty(a) > 0)
+      .forEach(a => {
+        const t = resolveTickerForAsset(a, tickerMap)
+        if (t) fetchLivePrice(a.id, t)
+      })
+  }, [loading, assets, fetchLivePrice])
 
   // ── 티커 저장 핸들러 ───────────────────────────────────────
   const handleTickerChange = useCallback((assetId: string, value: string) => {
@@ -504,124 +517,125 @@ export default function Analytics({ userId }: { userId: string | null }) {
         </div>
       )}
 
-      {/* 실시간 평가손익 (collapsible) */}
+      {/* 실시간 평가손익 */}
       <div className="card">
-        {/* 헤더 — 클릭으로 토글 */}
-        <button
-          className="w-full flex items-center justify-between"
-          onClick={() => setShowLive(v => !v)}
-        >
+        <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-semibold text-gray-200">실시간 평가손익</p>
-          {showLive
-            ? <ChevronUp className="w-4 h-4 text-gray-500" />
-            : <ChevronDown className="w-4 h-4 text-gray-500" />}
-        </button>
+          <button
+            onClick={() => {
+              const tickerMap = tickersRef.current
+              liveAssets.forEach(a => {
+                const t = resolveTickerForAsset(a, tickerMap) ?? tickers[a.id]
+                if (t) fetchLivePrice(a.id, t)
+              })
+            }}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            <RefreshCw className="w-3 h-3" />
+            전체 새로고침
+          </button>
+        </div>
 
-        {showLive && (
-          <div className="mt-4 space-y-4">
-            {/* 안내 배너 */}
-            <div className="flex items-start gap-2 rounded-xl bg-gray-800/60 border border-gray-700 px-3 py-2.5">
-              <Info className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-gray-400 leading-snug">
-                티커 코드를 입력하고 새로고침 버튼을 누르면 현재가를 조회합니다.
-                예시: 삼성전자 → <span className="mono text-gray-300">005930.KS</span>,
-                애플 → <span className="mono text-gray-300">AAPL</span>,
-                비트코인 → <span className="mono text-gray-300">BTC-USD</span>
-              </p>
-            </div>
+        {liveAssets.length === 0 ? (
+          <p className="text-sm text-gray-600 text-center py-4">보유 중인 비현금 자산이 없습니다.</p>
+        ) : (
+          <div className="space-y-3">
+            {liveAssets.map(asset => {
+              const autoTicker    = resolveTickerForAsset(asset, tickersRef.current)
+              const manualTicker  = tickers[asset.id] ?? ''
+              const effectiveTicker = autoTicker ?? manualTicker
+              const live          = livePrices[asset.id]
+              const fetching      = fetchingIds.has(asset.id)
+              const avg           = avgBuyPrice(asset)
+              const qty           = holdingQty(asset)
+              const currency      = MARKET[asset.market].currency
 
-            {liveAssets.length === 0 ? (
-              <p className="text-sm text-gray-600 text-center py-4">보유 중인 비현금 자산이 없습니다.</p>
-            ) : (
-              <div className="space-y-3">
-                {liveAssets.map(asset => {
-                  const ticker  = tickers[asset.id] ?? ''
-                  const live    = livePrices[asset.id]
-                  const fetching = fetchingIds.has(asset.id)
-                  const avg     = avgBuyPrice(asset)
-                  const qty     = holdingQty(asset)
-                  const currency = MARKET[asset.market].currency
+              let unrealizedPL: number | null = null
+              let unrealizedPct: number | null = null
+              let currentVal: number | null = null
 
-                  let unrealizedPL: number | null = null
-                  let unrealizedPct: number | null = null
-                  let currentVal: number | null = null
+              if (live && live !== 'error') {
+                unrealizedPL  = (live.price - avg) * qty
+                unrealizedPct = avg > 0 ? ((live.price - avg) / avg) * 100 : 0
+                currentVal    = live.price * qty
+              }
 
-                  if (live && live !== 'error') {
-                    unrealizedPL  = (live.price - avg) * qty
-                    unrealizedPct = avg > 0 ? ((live.price - avg) / avg) * 100 : 0
-                    currentVal    = live.price * qty
-                  }
+              return (
+                <div key={asset.id} className="rounded-xl border border-gray-800 bg-gray-800/30 px-4 py-3 space-y-2.5">
+                  {/* 종목명 + 시장 + 티커 뱃지 + 새로고침 */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-100">{asset.name}</span>
+                    <span className="text-[10px] text-gray-500">{MARKET[asset.market].label}</span>
+                    {autoTicker && (
+                      <span className="text-[10px] mono text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded-md">
+                        {autoTicker}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => { if (effectiveTicker) fetchLivePrice(asset.id, effectiveTicker) }}
+                      disabled={fetching || !effectiveTicker}
+                      className="ml-auto flex items-center justify-center w-8 h-8 rounded-xl bg-gray-800 border border-gray-700 hover:border-gray-600 text-gray-400 hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${fetching ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
 
-                  return (
-                    <div key={asset.id} className="rounded-xl border border-gray-800 bg-gray-800/30 px-4 py-3 space-y-2.5">
-                      {/* 종목명 + 시장 */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-gray-100">{asset.name}</span>
-                        <span className="text-[10px] text-gray-500">{MARKET[asset.market].label}</span>
-                      </div>
+                  {/* 티커 미탐지 시 수동 입력 */}
+                  {!autoTicker && (
+                    <input
+                      type="text"
+                      value={manualTicker}
+                      onChange={e => handleTickerChange(asset.id, e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && manualTicker) fetchLivePrice(asset.id, manualTicker) }}
+                      placeholder="티커 직접 입력 (예: 005930.KS, AAPL, BTC-USD)"
+                      className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 rounded-xl px-3 py-2 text-sm text-gray-100 placeholder:text-gray-600 outline-none transition-colors mono"
+                    />
+                  )}
 
-                      {/* 티커 입력 + 버튼 */}
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={ticker}
-                          onChange={e => handleTickerChange(asset.id, e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') fetchLivePrice(asset.id, ticker)
-                          }}
-                          placeholder="티커 코드 (예: AAPL)"
-                          className="flex-1 bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 rounded-xl px-3 py-2 text-sm text-gray-100 placeholder:text-gray-600 outline-none transition-colors mono"
-                        />
-                        <button
-                          onClick={() => fetchLivePrice(asset.id, ticker)}
-                          disabled={fetching || !ticker.trim()}
-                          className="flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800 border border-gray-700 hover:border-gray-600 text-gray-400 hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0"
-                        >
-                          <RefreshCw className={`w-4 h-4 ${fetching ? 'animate-spin' : ''}`} />
-                        </button>
-                      </div>
+                  {/* 로딩 스켈레톤 */}
+                  {fetching && !live && (
+                    <div className="h-10 bg-gray-800/50 rounded-lg animate-pulse" />
+                  )}
 
-                      {/* 결과 표시 */}
-                      {live === 'error' ? (
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <AlertCircle className="w-3.5 h-3.5 text-fall flex-shrink-0" />
-                          <span>데이터 확인 불가 — 티커 코드를 다시 확인해주세요</span>
-                        </div>
-                      ) : live ? (
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <p className="text-[10px] text-gray-600 mb-0.5">현재가</p>
-                            <p className="text-sm font-semibold mono text-gray-200">{fmtMoney(live.price, currency)}</p>
-                            {live.fromCache && (
-                              <span className="text-[9px] text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded-md">15분 캐시</span>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-gray-600 mb-0.5">평가금액</p>
-                            <p className="text-sm font-semibold mono text-gray-200">
-                              {currentVal !== null ? fmtMoney(currentVal, currency) : '—'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-gray-600 mb-0.5">평가손익</p>
-                            {unrealizedPL !== null && unrealizedPct !== null ? (
-                              <div className={unrealizedPL >= 0 ? 'text-rise' : 'text-fall'}>
-                                <p className="text-sm font-semibold mono">
-                                  {unrealizedPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(unrealizedPL), currency)}
-                                </p>
-                                <p className="text-[10px] mono">{fmtPct(unrealizedPct)}</p>
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-600">—</p>
-                            )}
-                          </div>
-                        </div>
-                      ) : null}
+                  {/* 결과 표시 */}
+                  {live === 'error' ? (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <AlertCircle className="w-3.5 h-3.5 text-fall flex-shrink-0" />
+                      <span>데이터 확인 불가 — 티커 코드를 다시 확인해주세요</span>
                     </div>
-                  )
-                })}
-              </div>
-            )}
+                  ) : live ? (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <p className="text-[10px] text-gray-600 mb-0.5">현재가</p>
+                        <p className="text-sm font-semibold mono text-gray-200">{fmtMoney(live.price, currency)}</p>
+                        {live.fromCache && (
+                          <span className="text-[9px] text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded-md">15분 캐시</span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-600 mb-0.5">평가금액</p>
+                        <p className="text-sm font-semibold mono text-gray-200">
+                          {currentVal !== null ? fmtMoney(currentVal, currency) : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-600 mb-0.5">평가손익</p>
+                        {unrealizedPL !== null && unrealizedPct !== null ? (
+                          <div className={unrealizedPL >= 0 ? 'text-rise' : 'text-fall'}>
+                            <p className="text-sm font-semibold mono">
+                              {unrealizedPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(unrealizedPL), currency)}
+                            </p>
+                            <p className="text-[10px] mono">{fmtPct(unrealizedPct)}</p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600">—</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
