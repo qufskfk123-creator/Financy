@@ -31,6 +31,8 @@ import {
   TrendingDown,
   TrendingUp,
   ArrowDownLeft,
+  Search,
+  Loader2,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────
@@ -452,26 +454,68 @@ function RiskIndexCard({ assets }: { assets: Asset[] }) {
 
 const MARKET_TYPES: MarketType[] = ['K-Stock', 'U-Stock', 'Crypto', 'Cash']
 
+type SearchResult = { ticker: string; name: string; exchange: string; type: string }
+
 function AddAssetForm({ onAdd, onClose }: {
-  onAdd:   (name: string, market: MarketType, quantity: number, price: number) => void
+  onAdd:   (name: string, market: MarketType, quantity: number, price: number, ticker?: string) => void
   onClose: () => void
 }) {
   const [name, setName]     = useState('')
+  const [ticker, setTicker] = useState('')
   const [qty, setQty]       = useState('')
   const [price, setPrice]   = useState('')
   const [market, setMarket] = useState<MarketType>('K-Stock')
   const [err, setErr]       = useState('')
 
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [showDropdown, setShowDropdown]   = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const cfg = MARKET_CONFIG[market]
   const q = parseFloat(qty), p = parseFloat(price)
   const total = !isNaN(q) && !isNaN(p) && q > 0 && p > 0 ? q * p : null
+
+  const handleNameChange = (value: string) => {
+    setName(value)
+    if (ticker) setTicker('')
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    if (value.trim().length < 2 || market === 'Cash') {
+      setSearchResults([])
+      setShowDropdown(false)
+      setSearchLoading(false)
+      return
+    }
+
+    setSearchLoading(true)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(value.trim())}`)
+        if (res.ok) {
+          const data: SearchResult[] = await res.json()
+          setSearchResults(data)
+          setShowDropdown(data.length > 0)
+        }
+      } catch {}
+      finally { setSearchLoading(false) }
+    }, 300)
+  }
+
+  const selectResult = (result: SearchResult) => {
+    setName(result.name)
+    setTicker(result.ticker)
+    setShowDropdown(false)
+    setSearchResults([])
+  }
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault(); setErr('')
     if (!name.trim())       return setErr('종목명을 입력해주세요.')
     if (isNaN(q) || q <= 0) return setErr('수량은 0보다 큰 숫자를 입력해주세요.')
     if (isNaN(p) || p <= 0) return setErr('매수가는 0보다 큰 숫자를 입력해주세요.')
-    onAdd(name.trim(), market, q, p); onClose()
+    onAdd(name.trim(), market, q, p, ticker || undefined); onClose()
   }
 
   return (
@@ -489,7 +533,7 @@ function AddAssetForm({ onAdd, onClose }: {
               {MARKET_TYPES.map(m => {
                 const c = MARKET_CONFIG[m]
                 return (
-                  <button key={m} type="button" onClick={() => setMarket(m)}
+                  <button key={m} type="button" onClick={() => { setMarket(m); setSearchResults([]); setShowDropdown(false) }}
                     className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-center transition-all
                       ${market === m ? c.badgeCls : 'bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-600'}`}>
                     <span className="text-xl leading-none">{c.emoji}</span>
@@ -499,12 +543,58 @@ function AddAssetForm({ onAdd, onClose }: {
               })}
             </div>
           </div>
+
+          {/* 종목명 + 자동완성 */}
           <div>
             <label className="block text-xs text-gray-500 mb-1.5">종목명</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)}
-              placeholder={market === 'Cash' ? '예) CMA, 보통예금' : market === 'Crypto' ? '예) 비트코인, BTC' : market === 'U-Stock' ? '예) 애플, AAPL' : '예) 삼성전자'}
-              className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder:text-gray-600 outline-none transition-colors" />
+            <div className="relative">
+              <input
+                type="text"
+                value={name}
+                onChange={e => handleNameChange(e.target.value)}
+                onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+                placeholder={market === 'Cash' ? '예) CMA, 보통예금' : market === 'Crypto' ? '예) 비트코인, BTC' : market === 'U-Stock' ? '예) 애플, AAPL' : '예) 삼성전자'}
+                className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 rounded-xl px-4 pr-10 py-2.5 text-sm text-gray-100 placeholder:text-gray-600 outline-none transition-colors"
+              />
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                {searchLoading
+                  ? <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+                  : <Search className="w-4 h-4 text-gray-600" />}
+              </div>
+
+              {/* 드롭다운 */}
+              {showDropdown && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden max-h-60 overflow-y-auto">
+                  {searchResults.map(r => (
+                    <button
+                      key={r.ticker}
+                      type="button"
+                      onMouseDown={() => selectResult(r)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-700/80 transition-colors text-left"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-100 truncate">{r.name}</p>
+                        <p className="text-xs text-gray-500 mono">{r.ticker}</p>
+                      </div>
+                      <span className="text-[10px] text-gray-500 flex-shrink-0 bg-gray-700 px-1.5 py-0.5 rounded">
+                        {r.exchange}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 선택된 티커 뱃지 */}
+            {ticker && (
+              <p className="text-[11px] text-brand-400 mt-1.5 mono flex items-center gap-1">
+                <Search className="w-3 h-3" />
+                {ticker}
+              </p>
+            )}
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1.5">매수 수량{market === 'Crypto' ? ' (개)' : market === 'Cash' ? '' : ' (주)'}</label>
@@ -1033,10 +1123,10 @@ export default function Portfolio({ onTransaction, userId }: {
 
   // ── CRUD ────────────────────────────────────────────────────
 
-  const handleAdd = useCallback((name: string, market: MarketType, quantity: number, price: number) => {
+  const handleAdd = useCallback((name: string, market: MarketType, quantity: number, price: number, ticker?: string) => {
     const now = new Date().toISOString()
     const newAsset: Asset = {
-      id: genId(), name, market, createdAt: now, sells: [],
+      id: ticker || genId(), name, market, createdAt: now, sells: [],
       entries: [{ id: genId(), quantity, price, date: now }],
     }
     setAssets(prev => [...prev, newAsset])
