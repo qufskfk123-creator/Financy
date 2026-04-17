@@ -721,7 +721,7 @@ function SectorSection({ assets, tickerMap, fundamentals, fundLoading, toKrw, to
             </Pie>
             <Tooltip
               contentStyle={tooltipStyle}
-              formatter={(v: number) => [`${totalKrw > 0 ? ((v / totalKrw) * 100).toFixed(1) : 0}%`, '']}
+              formatter={(v: any) => [`${totalKrw > 0 ? ((Number(v) / totalKrw) * 100).toFixed(1) : 0}%`, '']}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -785,9 +785,9 @@ function DividendSection({ assets, tickerMap, fundamentals, fundLoading, tooltip
             <YAxis type="category" dataKey="name" width={72} tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip
               contentStyle={tooltipStyle}
-              formatter={(v: number, _: string, p: any) => [`${v.toFixed(2)}%`, p.payload.fullName]}
+              formatter={(v: any, _: any, p: any) => [`${Number(v).toFixed(2)}%`, p.payload.fullName]}
             />
-            <Bar dataKey="yield" radius={[0, 6, 6, 0]} fill="#10B981" label={{ position: 'right', fill: '#6ee7b7', fontSize: 11, formatter: (v: number) => `${v.toFixed(2)}%` }} />
+            <Bar dataKey="yield" radius={[0, 6, 6, 0]} fill="#10B981" label={{ position: 'right', fill: '#6ee7b7', fontSize: 11, formatter: (v: any) => `${Number(v).toFixed(2)}%` }} />
           </BarChart>
         </ResponsiveContainer>
       </div>
