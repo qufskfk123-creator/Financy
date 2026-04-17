@@ -469,6 +469,7 @@ function AddAssetForm({ onAdd, onClose }: {
 
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError,   setSearchError]   = useState(false)
   const [showDropdown, setShowDropdown]   = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -490,16 +491,24 @@ function AddAssetForm({ onAdd, onClose }: {
     }
 
     setSearchLoading(true)
+    setSearchError(false)
     debounceRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(value.trim())}`)
         if (res.ok) {
           const data: SearchResult[] = await res.json()
           setSearchResults(data)
-          setShowDropdown(data.length > 0)
+          setShowDropdown(true)
+        } else {
+          setSearchError(true)
+          setSearchResults([])
         }
-      } catch {}
-      finally { setSearchLoading(false) }
+      } catch {
+        setSearchError(true)
+        setSearchResults([])
+      } finally {
+        setSearchLoading(false)
+      }
     }, 300)
   }
 
@@ -508,6 +517,7 @@ function AddAssetForm({ onAdd, onClose }: {
     setTicker(result.ticker)
     setShowDropdown(false)
     setSearchResults([])
+    setSearchError(false)
   }
 
   const submit = (e: React.FormEvent) => {
@@ -564,9 +574,13 @@ function AddAssetForm({ onAdd, onClose }: {
               </div>
 
               {/* 드롭다운 */}
-              {showDropdown && searchResults.length > 0 && (
+              {showDropdown && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden max-h-60 overflow-y-auto">
-                  {searchResults.map(r => (
+                  {searchError ? (
+                    <p className="px-4 py-3 text-xs text-rose-400">검색 오류가 발생했습니다. 다시 시도해주세요.</p>
+                  ) : searchResults.length === 0 ? (
+                    <p className="px-4 py-3 text-xs text-gray-500">검색 결과가 없습니다.</p>
+                  ) : searchResults.map(r => (
                     <button
                       key={r.ticker}
                       type="button"

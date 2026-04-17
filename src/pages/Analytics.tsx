@@ -3,19 +3,24 @@
  * 포트폴리오 심층 분석: 자산 배분, 실현손익, 실시간 평가손익
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   PieChart, Pie, Cell, Tooltip, BarChart, Bar,
   XAxis, YAxis, ResponsiveContainer,
 } from 'recharts'
 import {
   BarChart2, RefreshCw,
-  Info, ChevronDown, ChevronUp, AlertCircle,
+  Info, ChevronDown, ChevronUp, AlertCircle, TrendingUp, TrendingDown,
 } from 'lucide-react'
 import type { Asset, MarketType } from './Portfolio'
 import { fetchAssets } from '../lib/db'
 import { getPrice } from '../lib/priceCache'
 import type { PriceResult } from '../lib/priceCache'
+import {
+  getCachedFundamentals,
+  refreshFundamentals,
+} from '../lib/fundamentalsCache'
+import type { Fundamentals } from '../lib/fundamentalsCache'
 
 // ── localStorage helpers ───────────────────────────────────
 
@@ -167,16 +172,36 @@ function CustomTooltip({ active, payload, label }: {
   )
 }
 
+// ── 섹터 색상 팔레트 ───────────────────────────────────────
+const SECTOR_COLORS = [
+  '#6366F1','#3B82F6','#10B981','#F59E0B',
+  '#EF4444','#EC4899','#8B5CF6','#06B6D4',
+  '#F97316','#14B8A6','#84CC16','#A78BFA',
+]
+
+// ── 자산 → Yahoo 티커 매핑 ─────────────────────────────────
+const TICKER_RE = /^[A-Z0-9.\-]{2,20}$/
+function resolveTickerForAsset(asset: Asset, tickerMap: Record<string, string>): string | null {
+  if (tickerMap[asset.id]) return tickerMap[asset.id]
+  if (TICKER_RE.test(asset.id) && !/^\d{13}-/.test(asset.id)) return asset.id
+  return null
+}
+
 // ── Main Component ─────────────────────────────────────────
 
 export default function Analytics({ userId }: { userId: string | null }) {
-  const [assets,      setAssets]      = useState<Asset[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [krwRate,     setKrwRate]     = useState(1350)
-  const [tickers,     setTickers]     = useState<Record<string, string>>({})
-  const [livePrices,  setLivePrices]  = useState<Record<string, PriceResult | 'error' | null>>({})
-  const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set())
-  const [showLive,    setShowLive]    = useState(false)
+  const [assets,        setAssets]        = useState<Asset[]>([])
+  const [loading,       setLoading]       = useState(true)
+  const [krwRate,       setKrwRate]       = useState(1350)
+  const [tickers,       setTickers]       = useState<Record<string, string>>({})
+  const [livePrices,    setLivePrices]    = useState<Record<string, PriceResult | 'error' | null>>({})
+  const [fetchingIds,   setFetchingIds]   = useState<Set<string>>(new Set())
+  const [showLive,      setShowLive]      = useState(false)
+  const [fundamentals,  setFundamentals]  = useState<Map<string, Fundamentals>>(new Map())
+  const [fundLoading,   setFundLoading]   = useState(false)
+
+  const tickersRef = useRef(tickers)
+  useEffect(() => { tickersRef.current = tickers }, [tickers])
 
   // ── 자산 로드 + 환율 조회 ───────────────────────────────────
   useEffect(() => {
@@ -188,7 +213,6 @@ export default function Analytics({ userId }: { userId: string | null }) {
     loadAssetsAsync.then(data => { setAssets(data); setLoading(false) })
     setTickers(loadTickers())
 
-    // 환율 조회
     fetch('/api/exchange-rates')
       .then(r => r.json())
       .then((d: { rates?: Array<{ code: string; rate: number }> }) => {
@@ -197,6 +221,32 @@ export default function Analytics({ userId }: { userId: string | null }) {
       })
       .catch(() => {})
   }, [userId])
+
+  // ── 기본 지표 로드 (일일 캐시) ─────────────────────────────
+  useEffect(() => {
+    if (assets.length === 0) return
+    const tickerMap = tickersRef.current
+    const assetTickers = assets
+      .filter(a => a.market !== 'Cash')
+      .map(a => resolveTickerForAsset(a, tickerMap))
+      .filter((t): t is string => !!t)
+
+    if (assetTickers.length === 0) return
+
+    // Phase 1: DB 캐시 즉시 반환
+    getCachedFundamentals(assetTickers).then(({ data, stale }) => {
+      if (data.size > 0) setFundamentals(data)
+
+      // Phase 2: stale/미존재 티커만 API 호출
+      if (stale.length === 0) return
+      setFundLoading(true)
+      refreshFundamentals(stale)
+        .then(fresh => {
+          if (fresh.size > 0) setFundamentals(prev => new Map([...prev, ...fresh]))
+        })
+        .finally(() => setFundLoading(false))
+    })
+  }, [assets])
 
   // ── fetchLivePrice ─────────────────────────────────────────
   const fetchLivePrice = useCallback(async (assetId: string, ticker: string) => {
@@ -576,10 +626,241 @@ export default function Analytics({ userId }: { userId: string | null }) {
         )}
       </div>
 
+      {/* ── 섹터 비중 ── */}
+      <SectorSection
+        assets={assets}
+        tickerMap={tickers}
+        fundamentals={fundamentals}
+        fundLoading={fundLoading}
+        toKrw={toKrw}
+        totalKrw={totalKrw}
+        tooltipStyle={tooltipStyle}
+      />
+
+      {/* ── 배당 분석 ── */}
+      <DividendSection
+        assets={assets}
+        tickerMap={tickers}
+        fundamentals={fundamentals}
+        fundLoading={fundLoading}
+        tooltipStyle={tooltipStyle}
+      />
+
+      {/* ── 적정가 비교 ── */}
+      <UpsideSection
+        assets={assets}
+        tickerMap={tickers}
+        fundamentals={fundamentals}
+        fundLoading={fundLoading}
+      />
+
       {/* 하단 안내 */}
       <p className="text-[11px] text-gray-700 text-center pb-4">
         현재가는 15분 캐시 적용 · Yahoo Finance 기준 · 투자 권유 아님
       </p>
+    </div>
+  )
+}
+
+// ── 섹터 비중 섹션 ──────────────────────────────────────────
+
+function SectorSection({ assets, tickerMap, fundamentals, fundLoading, toKrw, totalKrw, tooltipStyle }: {
+  assets:       Asset[]
+  tickerMap:    Record<string, string>
+  fundamentals: Map<string, Fundamentals>
+  fundLoading:  boolean
+  toKrw:        (a: Asset) => number
+  totalKrw:     number
+  tooltipStyle: object
+}) {
+  const sectorMap = new Map<string, number>()
+  for (const asset of assets) {
+    if (asset.market === 'Cash') continue
+    const ticker  = resolveTickerForAsset(asset, tickerMap)
+    const sector  = (ticker && fundamentals.get(ticker)?.sector) || '기타'
+    const krw     = toKrw(asset)
+    sectorMap.set(sector, (sectorMap.get(sector) ?? 0) + krw)
+  }
+
+  const pieData = Array.from(sectorMap.entries())
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, value], i) => ({
+      name, value, color: SECTOR_COLORS[i % SECTOR_COLORS.length],
+    }))
+
+  if (pieData.length === 0) {
+    if (!fundLoading) return null
+    return (
+      <div className="card">
+        <div className="flex items-center gap-2 mb-4">
+          <p className="text-sm font-semibold text-gray-200">섹터 비중</p>
+          <span className="text-[10px] text-gray-600 animate-pulse">지표 분석 중…</span>
+        </div>
+        <div className="h-48 bg-gray-800/50 rounded-xl animate-pulse" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="card">
+      <div className="flex items-center gap-2 mb-4">
+        <p className="text-sm font-semibold text-gray-200">섹터 비중</p>
+        {fundLoading && <span className="text-[10px] text-brand-400 animate-pulse">업데이트 중</span>}
+      </div>
+      <div style={{ width: '100%', height: 220 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={pieData} cx="50%" cy="50%"
+              outerRadius={80} innerRadius={50}
+              paddingAngle={3} dataKey="value"
+              labelLine={false} label={PieLabelInner as any}
+            >
+              {pieData.map((e, i) => <Cell key={i} fill={e.color} />)}
+            </Pie>
+            <Tooltip
+              contentStyle={tooltipStyle}
+              formatter={(v: number) => [`${totalKrw > 0 ? ((v / totalKrw) * 100).toFixed(1) : 0}%`, '']}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+        {pieData.map((e, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: e.color }} />
+            <span className="text-xs text-gray-400">{e.name}</span>
+            <span className="text-xs text-gray-600 mono">
+              {totalKrw > 0 ? ((e.value / totalKrw) * 100).toFixed(1) : 0}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── 배당 분석 섹션 ──────────────────────────────────────────
+
+function DividendSection({ assets, tickerMap, fundamentals, fundLoading, tooltipStyle }: {
+  assets:       Asset[]
+  tickerMap:    Record<string, string>
+  fundamentals: Map<string, Fundamentals>
+  fundLoading:  boolean
+  tooltipStyle: object
+}) {
+  const barData = assets
+    .filter(a => a.market !== 'Cash')
+    .flatMap(a => {
+      const ticker  = resolveTickerForAsset(a, tickerMap)
+      if (!ticker) return []
+      const dyield  = fundamentals.get(ticker)?.dividend_yield
+      if (!dyield || dyield <= 0) return []
+      return [{ name: a.name.length > 8 ? a.name.slice(0, 8) + '…' : a.name, yield: dyield, fullName: a.name }]
+    })
+    .sort((a, b) => b.yield - a.yield)
+
+  if (barData.length === 0) {
+    if (!fundLoading) return null
+    return (
+      <div className="card">
+        <p className="text-sm font-semibold text-gray-200 mb-4">배당 분석</p>
+        <div className="h-40 bg-gray-800/50 rounded-xl animate-pulse" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="card">
+      <div className="flex items-center gap-2 mb-4">
+        <p className="text-sm font-semibold text-gray-200">배당 분석</p>
+        {fundLoading && <span className="text-[10px] text-brand-400 animate-pulse">업데이트 중</span>}
+        <span className="ml-auto text-[10px] text-gray-600">연간 배당 수익률 기준</span>
+      </div>
+      <div style={{ width: '100%', height: Math.max(160, barData.length * 44) }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 40, left: 4, bottom: 4 }}>
+            <XAxis type="number" hide domain={[0, 'auto']} />
+            <YAxis type="category" dataKey="name" width={72} tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              formatter={(v: number, _: string, p: any) => [`${v.toFixed(2)}%`, p.payload.fullName]}
+            />
+            <Bar dataKey="yield" radius={[0, 6, 6, 0]} fill="#10B981" label={{ position: 'right', fill: '#6ee7b7', fontSize: 11, formatter: (v: number) => `${v.toFixed(2)}%` }} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+// ── 적정가 비교 섹션 ────────────────────────────────────────
+
+function UpsideSection({ assets, tickerMap, fundamentals, fundLoading }: {
+  assets:       Asset[]
+  tickerMap:    Record<string, string>
+  fundamentals: Map<string, Fundamentals>
+  fundLoading:  boolean
+}) {
+  const rows = assets
+    .filter(a => a.market !== 'Cash')
+    .flatMap(a => {
+      const ticker = resolveTickerForAsset(a, tickerMap)
+      if (!ticker) return []
+      const f = fundamentals.get(ticker)
+      if (!f?.target_price || !f?.current_price) return []
+      const upside = ((f.target_price - f.current_price) / f.current_price) * 100
+      const currency = MARKET[a.market].currency
+      return [{ asset: a, ticker, f, upside, currency }]
+    })
+    .sort((a, b) => b.upside - a.upside)
+
+  if (rows.length === 0) {
+    if (!fundLoading) return null
+    return (
+      <div className="card">
+        <p className="text-sm font-semibold text-gray-200 mb-4">적정가 비교</p>
+        <div className="h-32 bg-gray-800/50 rounded-xl animate-pulse" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-semibold text-gray-200">적정가 비교</p>
+        {fundLoading && <span className="text-[10px] text-brand-400 animate-pulse">업데이트 중</span>}
+        <span className="ml-auto text-[10px] text-gray-600">애널리스트 목표주가 기준</span>
+      </div>
+      <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 gap-y-0.5 pb-1 border-b border-gray-800">
+        {['종목', '현재가', '목표주가', '상승 여력'].map(h => (
+          <p key={h} className="text-[10px] text-gray-600 font-medium">{h}</p>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {rows.map(({ asset, f, upside, currency }) => {
+          const isUp = upside >= 0
+          return (
+            <div key={asset.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 items-center py-1.5 rounded-lg hover:bg-gray-800/50 px-1 -mx-1 transition-colors">
+              <div className="min-w-0">
+                <p className="text-sm text-gray-200 font-medium truncate">{asset.name}</p>
+                <p className="text-[10px] text-gray-600 mono">{resolveTickerForAsset(asset, tickerMap)}</p>
+              </div>
+              <p className="text-xs text-gray-400 mono text-right">
+                {fmtMoney(f.current_price!, currency)}
+              </p>
+              <p className="text-xs text-gray-300 mono font-medium text-right">
+                {fmtMoney(f.target_price!, currency)}
+              </p>
+              <div className={`flex items-center gap-1 justify-end text-xs font-bold mono ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                {isUp ? '+' : ''}{upside.toFixed(1)}%
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
