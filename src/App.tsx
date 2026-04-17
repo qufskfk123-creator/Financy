@@ -171,6 +171,8 @@ export default function App() {
           setCurrentPage('auth')
         }}
         onSignOut={handleSignOut}
+        theme={theme}
+        onTheme={setTheme}
       />
 
       {/* pb-20 md:pb-0 — 모바일 하단 탭바 + 홈 인디케이터 여백 */}
@@ -197,6 +199,7 @@ export default function App() {
               onTheme={setTheme}
               userName={userName}
               userEmail={userEmail}
+              userId={user?.id ?? null}
               onAuthClick={() => {
                 setAuthRedirectTo('dashboard')
                 setCurrentPage('auth')

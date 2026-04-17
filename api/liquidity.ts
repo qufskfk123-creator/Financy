@@ -2,50 +2,34 @@
  * Vercel Serverless Function — /api/liquidity
  *
  * 자금 흐름 온도계 (Liquidity Flow Thermometer)
- * Yahoo Finance 공개 API에서 나스닥(^IXIC)과 달러 인덱스(DX-Y.NYB)의
- * 최근 5일 종가 등락률을 비교해 0~100 사이의 자금 흐름 점수를 반환합니다.
+ * Finnhub 캔들 API로 QQQ (나스닥 100 ETF)와 UUP (달러 ETF)의
+ * 최근 5거래일 등락률을 비교해 0~100 점수를 반환합니다.
  *
- * 판정 로직:
- *   raw  = nasdaqChg(%) − dollarChg(%)
- *   score = clamp(50 + raw × 4, 0, 100)
- *
- *   달러↑ + 주식↓ → score 낮음 → 안전자산 선호
- *   달러↓ + 주식↑ → score 높음 → 위험자산 선호
+ * score = clamp(50 + (QQQ등락 - UUP등락) × 4, 0, 100)
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-const YF_BASE = 'https://query2.finance.yahoo.com/v8/finance/chart'
-const HEADERS = {
-  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept':          'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Referer':         'https://finance.yahoo.com/',
-}
+async function fetch5dChg(
+  symbol: string,
+  apiKey: string,
+): Promise<{ chg: number; price: number }> {
+  const to   = Math.floor(Date.now() / 1000)
+  const from = to - 14 * 24 * 3600  // 14일 범위 → 5거래일 이상 확보
 
-// ── 5일 종가 등락률 계산 ────────────────────────────────────
+  const r = await fetch(
+    `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}&token=${apiKey}`,
+    { signal: AbortSignal.timeout(7_000) },
+  )
+  if (!r.ok) throw new Error(`HTTP ${r.status} — ${symbol}`)
 
-async function fetch5dChg(symbol: string): Promise<{ chg: number; price: number }> {
-  const url = `${YF_BASE}/${encodeURIComponent(symbol)}?interval=1d&range=10d&includePrePost=false`
+  const data: { c?: number[]; s: string } = await r.json()
+  if (data.s !== 'ok' || !data.c || data.c.length < 2) throw new Error(`No data — ${symbol}`)
 
-  const res = await fetch(url, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(7_000),
-  })
+  const closes = data.c.filter((v): v is number => typeof v === 'number' && isFinite(v))
+  if (closes.length < 2) throw new Error(`Insufficient data — ${symbol}`)
 
-  if (!res.ok) throw new Error(`HTTP ${res.status} — ${symbol}`)
-
-  const json: any = await res.json()
-  const result = json?.chart?.result?.[0]
-  if (!result) throw new Error(`No chart result — ${symbol}`)
-
-  const closes: (number | null)[] = result.indicators?.quote?.[0]?.close ?? []
-  const valid = closes.filter((c): c is number => typeof c === 'number' && isFinite(c))
-
-  if (valid.length < 2) throw new Error(`Insufficient data points — ${symbol}`)
-
-  // 최근 6개 종가 기준 → 약 5거래일 등락률
-  const slice = valid.slice(-6)
+  const slice = closes.slice(-6)
   const first = slice[0]
   const last  = slice[slice.length - 1]
 
@@ -55,8 +39,6 @@ async function fetch5dChg(symbol: string): Promise<{ chg: number; price: number 
   }
 }
 
-// ── 핸들러 ─────────────────────────────────────────────────
-
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
@@ -64,20 +46,19 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
 
   if (_req.method === 'OPTIONS') return res.status(200).end()
 
+  const FINNHUB_KEY = process.env.FINNHUB_API_KEY ?? ''
+
   try {
     const [nasdaqR, dollarR] = await Promise.allSettled([
-      fetch5dChg('^IXIC'),
-      fetch5dChg('DX-Y.NYB'),
+      fetch5dChg('QQQ', FINNHUB_KEY),  // NASDAQ 100 ETF
+      fetch5dChg('UUP', FINNHUB_KEY),  // Invesco Dollar ETF
     ])
 
     const nasdaqOk = nasdaqR.status === 'fulfilled'
     const dollarOk = dollarR.status === 'fulfilled'
 
-    // 둘 다 실패하면 에러 응답 (500 아닌 200 + error 필드)
     if (!nasdaqOk && !dollarOk) {
-      return res.status(200).json({
-        error: '데이터를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.',
-      })
+      return res.status(200).json({ error: '데이터를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.' })
     }
 
     const nasdaqChg   = nasdaqOk ? nasdaqR.value.chg   : null
@@ -85,7 +66,6 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     const nasdaqPrice = nasdaqOk ? nasdaqR.value.price : null
     const dollarPrice = dollarOk ? dollarR.value.price : null
 
-    // 자금 흐름 점수: 나스닥↑ + 달러↓ = 위험자산 선호(고점수)
     const raw   = (nasdaqChg ?? 0) - (dollarChg ?? 0)
     const score = Math.round(Math.min(100, Math.max(0, 50 + raw * 4)))
 
@@ -104,17 +84,11 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       : '나스닥 약세 + 달러 강세 — 자금이 안전자산으로 집중 중입니다.'
 
     return res.status(200).json({
-      score,
-      label,
-      desc,
-      nasdaqChg,
-      dollarChg,
-      nasdaqPrice,
-      dollarPrice,
+      score, label, desc,
+      nasdaqChg, dollarChg, nasdaqPrice, dollarPrice,
       partial: !nasdaqOk || !dollarOk,
     })
   } catch (err: any) {
-    // 예외 발생 시에도 500 대신 200 + error 필드로 응답해 프론트 에러 바운더리가 필요 없게 처리
     return res.status(200).json({
       error: `데이터 점검 중 — ${err?.message ?? '알 수 없는 오류'}`,
     })

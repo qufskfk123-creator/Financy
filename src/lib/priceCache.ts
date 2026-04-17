@@ -54,7 +54,7 @@ export async function getPrice(ticker: string): Promise<PriceResult | null> {
     }
   } catch { /* 테이블 미존재 or 권한 없음 → 스킵 */ }
 
-  // 2. Yahoo Finance API (기존 /api/quote 활용)
+  // 2. /api/quote 호출 (Finnhub / Upbit)
   try {
     const res = await fetch(`/api/quote?ticker=${encodeURIComponent(t)}`)
     if (!res.ok) return null
@@ -62,7 +62,7 @@ export async function getPrice(ticker: string): Promise<PriceResult | null> {
     if (!json?.price) return null
 
     const currency: 'KRW' | 'USD' =
-      t.endsWith('.KS') || t.endsWith('.KQ') ? 'KRW' : 'USD'
+      t.endsWith('.KS') || t.endsWith('.KQ') || t.startsWith('KRW-') ? 'KRW' : 'USD'
     const now = new Date().toISOString()
 
     // 3. 캐시 업데이트 (실패해도 결과는 반환)

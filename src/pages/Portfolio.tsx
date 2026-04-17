@@ -14,6 +14,7 @@ import {
   fetchAssets,
   upsertAsset,
   deleteAsset as dbDeleteAsset,
+  deleteAllAssets as dbDeleteAllAssets,
   migrateLocalToDb,
 } from '../lib/db'
 import {
@@ -460,64 +461,53 @@ function AddAssetForm({ onAdd, onClose }: {
   onAdd:   (name: string, market: MarketType, quantity: number, price: number, ticker?: string) => void
   onClose: () => void
 }) {
-  const [name, setName]     = useState('')
-  const [ticker, setTicker] = useState('')
-  const [qty, setQty]       = useState('')
-  const [price, setPrice]   = useState('')
-  const [market, setMarket] = useState<MarketType>('K-Stock')
-  const [err, setErr]       = useState('')
-
+  const [name, setName]           = useState('')
+  const [ticker, setTicker]       = useState('')          // resolved ticker from search
+  const [qty, setQty]             = useState('')
+  const [price, setPrice]         = useState('')
+  const [market, setMarket]       = useState<MarketType>('K-Stock')
+  const [err, setErr]             = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
-  const [searchError,   setSearchError]   = useState(false)
   const [showDropdown, setShowDropdown]   = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const cfg = MARKET_CONFIG[market]
   const q = parseFloat(qty), p = parseFloat(price)
   const total = !isNaN(q) && !isNaN(p) && q > 0 && p > 0 ? q * p : null
+  const hasSearch = market !== 'Cash'
 
-  const handleNameChange = (value: string) => {
-    setName(value)
-    if (ticker) setTicker('')
-
+  const handleNameChange = (val: string) => {
+    setName(val)
+    setTicker('')  // clear resolved ticker on manual edit
+    if (!hasSearch || val.trim().length < 1) { setSearchResults([]); setShowDropdown(false); return }
     if (debounceRef.current) clearTimeout(debounceRef.current)
-
-    if (value.trim().length < 2 || market === 'Cash') {
-      setSearchResults([])
-      setShowDropdown(false)
-      setSearchLoading(false)
-      return
-    }
-
-    setSearchLoading(true)
-    setSearchError(false)
     debounceRef.current = setTimeout(async () => {
+      setSearchLoading(true)
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(value.trim())}`)
-        if (res.ok) {
-          const data: SearchResult[] = await res.json()
-          setSearchResults(data)
-          setShowDropdown(true)
-        } else {
-          setSearchError(true)
-          setSearchResults([])
-        }
-      } catch {
-        setSearchError(true)
-        setSearchResults([])
-      } finally {
-        setSearchLoading(false)
-      }
-    }, 300)
+        const r = await fetch(`/api/search?q=${encodeURIComponent(val.trim())}&market=${encodeURIComponent(market)}`)
+        const data: SearchResult[] = await r.json()
+        setSearchResults(Array.isArray(data) ? data : [])
+        setShowDropdown(true)
+      } catch { setSearchResults([]) }
+      finally { setSearchLoading(false) }
+    }, 350)
   }
 
   const selectResult = (result: SearchResult) => {
     setName(result.name)
     setTicker(result.ticker)
-    setShowDropdown(false)
     setSearchResults([])
-    setSearchError(false)
+    setShowDropdown(false)
+  }
+
+  // Market 변경 시 검색 초기화
+  const handleMarketChange = (m: MarketType) => {
+    setMarket(m)
+    setName('')
+    setTicker('')
+    setSearchResults([])
+    setShowDropdown(false)
   }
 
   const submit = (e: React.FormEvent) => {
@@ -525,7 +515,8 @@ function AddAssetForm({ onAdd, onClose }: {
     if (!name.trim())       return setErr('종목명을 입력해주세요.')
     if (isNaN(q) || q <= 0) return setErr('수량은 0보다 큰 숫자를 입력해주세요.')
     if (isNaN(p) || p <= 0) return setErr('매수가는 0보다 큰 숫자를 입력해주세요.')
-    onAdd(name.trim(), market, q, p, ticker || undefined); onClose()
+    onAdd(name.trim(), market, q, p, ticker || undefined)
+    onClose()
   }
 
   return (
@@ -543,7 +534,7 @@ function AddAssetForm({ onAdd, onClose }: {
               {MARKET_TYPES.map(m => {
                 const c = MARKET_CONFIG[m]
                 return (
-                  <button key={m} type="button" onClick={() => { setMarket(m); setSearchResults([]); setShowDropdown(false) }}
+                  <button key={m} type="button" onClick={() => handleMarketChange(m)}
                     className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-center transition-all
                       ${market === m ? c.badgeCls : 'bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-600'}`}>
                     <span className="text-xl leading-none">{c.emoji}</span>
@@ -554,60 +545,51 @@ function AddAssetForm({ onAdd, onClose }: {
             </div>
           </div>
 
-          {/* 종목명 + 자동완성 */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5">종목명</label>
+          <div className="relative">
+            <label className="block text-xs text-gray-500 mb-1.5">
+              종목명
+              {hasSearch && <span className="ml-1 text-gray-700">— 입력하면 자동 검색됩니다</span>}
+            </label>
             <div className="relative">
+              {hasSearch && (
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                  {searchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                </span>
+              )}
               <input
                 type="text"
                 value={name}
-                onChange={e => handleNameChange(e.target.value)}
-                onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+                onChange={e => hasSearch ? handleNameChange(e.target.value) : setName(e.target.value)}
                 onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-                placeholder={market === 'Cash' ? '예) CMA, 보통예금' : market === 'Crypto' ? '예) 비트코인, BTC' : market === 'U-Stock' ? '예) 애플, AAPL' : '예) 삼성전자'}
-                className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 rounded-xl px-4 pr-10 py-2.5 text-sm text-gray-100 placeholder:text-gray-600 outline-none transition-colors"
+                onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+                placeholder={market === 'Cash' ? '예) CMA, 보통예금' : market === 'Crypto' ? '예) 비트코인' : market === 'U-Stock' ? '예) 애플 (Apple)' : '예) 삼성전자'}
+                className={`w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 rounded-xl py-2.5 text-sm text-gray-100 placeholder:text-gray-600 outline-none transition-colors ${hasSearch ? 'pl-9 pr-4' : 'px-4'}`}
               />
-              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                {searchLoading
-                  ? <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
-                  : <Search className="w-4 h-4 text-gray-600" />}
-              </div>
-
-              {/* 드롭다운 */}
-              {showDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden max-h-60 overflow-y-auto">
-                  {searchError ? (
-                    <p className="px-4 py-3 text-xs text-rose-400">검색 오류가 발생했습니다. 다시 시도해주세요.</p>
-                  ) : searchResults.length === 0 ? (
-                    <p className="px-4 py-3 text-xs text-gray-500">검색 결과가 없습니다.</p>
-                  ) : searchResults.map(r => (
-                    <button
-                      key={r.ticker}
-                      type="button"
-                      onMouseDown={() => selectResult(r)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-700/80 transition-colors text-left"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-100 truncate">{r.name}</p>
-                        <p className="text-xs text-gray-500 mono">{r.ticker}</p>
-                      </div>
-                      <span className="text-[10px] text-gray-500 flex-shrink-0 bg-gray-700 px-1.5 py-0.5 rounded">
-                        {r.exchange}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
-
-            {/* 선택된 티커 뱃지 */}
-            {ticker && (
-              <p className="text-[11px] text-brand-400 mt-1.5 mono flex items-center gap-1">
-                <Search className="w-3 h-3" />
-                {ticker}
-              </p>
+            {/* 검색 드롭다운 */}
+            {showDropdown && searchResults.length > 0 && (
+              <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+                {searchResults.map(result => (
+                  <button key={result.ticker} type="button" onMouseDown={() => selectResult(result)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-800 text-left transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-100 font-medium truncate">{result.name}</p>
+                      <p className="text-[10px] text-gray-500 mono">{result.ticker} · {result.exchange}</p>
+                    </div>
+                    <span className="text-[10px] text-gray-600 flex-shrink-0">{result.type}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
+
+          {/* 티커 배지 */}
+          {ticker && (
+            <div className="flex items-center gap-2 -mt-1">
+              <span className="text-[10px] text-brand-400 bg-brand-500/10 border border-brand-500/20 px-2 py-0.5 rounded-full mono">{ticker}</span>
+              <span className="text-[10px] text-gray-600">자동 가격 조회 지원</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1152,6 +1134,15 @@ export default function Portfolio({ onTransaction, userId }: {
     })
   }, [userId, onTransaction])
 
+  const handleDeleteAll = useCallback(async () => {
+    if (!window.confirm('모든 자산 및 거래 내역을 삭제할까요?\n이 작업은 되돌릴 수 없습니다.')) return
+    setAssets([])
+    localStorage.removeItem('financy_assets')
+    if (userId) {
+      try { await dbDeleteAllAssets(userId) } catch (e) { console.error(e); setDbSaveErr(true) }
+    }
+  }, [userId])
+
   const handleAddEntry = useCallback((assetId: string, qty: number, price: number) => {
     const newEntry = { id: genId(), quantity: qty, price, date: new Date().toISOString() }
     setAssets(prev => prev.map(a => a.id !== assetId ? a : {
@@ -1355,6 +1346,27 @@ export default function Portfolio({ onTransaction, userId }: {
             </div>
           )}
 
+          {assets.length > 0 && (
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">보유 자산</p>
+              <div className="flex items-center gap-3">
+                {userId && (
+                  <span className="text-[10px] text-gray-700 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    클라우드 저장됨
+                  </span>
+                )}
+                <button
+                  onClick={handleDeleteAll}
+                  className="flex items-center gap-1 text-[10px] text-rose-500/60 hover:text-rose-400 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  전체 삭제
+                </button>
+              </div>
+            </div>
+          )}
+
           {assets.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
               <div className="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center">
@@ -1370,15 +1382,6 @@ export default function Portfolio({ onTransaction, userId }: {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">보유 자산</p>
-                {userId && (
-                  <span className="text-[10px] text-gray-700 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    클라우드 저장됨
-                  </span>
-                )}
-              </div>
               {assets.map(asset => (
                 <AssetCard
                   key={asset.id}
@@ -1396,6 +1399,7 @@ export default function Portfolio({ onTransaction, userId }: {
       )}
 
       {showForm && <AddAssetForm onAdd={handleAdd} onClose={() => setShowForm(false)} />}
+
     </div>
   )
 }

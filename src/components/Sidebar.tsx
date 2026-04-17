@@ -9,10 +9,13 @@ import {
   LogIn,
   LogOut,
   Share2,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { useShare } from '../lib/useShare'
 import Toast from './Toast'
 import type { Page } from '../App'
+import type { Theme } from '../pages/Settings'
 
 interface NavItem {
   id: Page
@@ -42,9 +45,11 @@ interface SidebarProps {
   userEmail?:  string | null
   onAuthClick: () => void
   onSignOut:   () => void
+  theme:       Theme
+  onTheme:     (t: Theme) => void
 }
 
-export default function Sidebar({ currentPage, onNavigate, userName, userEmail, onAuthClick, onSignOut }: SidebarProps) {
+export default function Sidebar({ currentPage, onNavigate, userName, userEmail, onAuthClick, onSignOut, theme, onTheme }: SidebarProps) {
   const { handleShare, toastVisible } = useShare()
 
   return (
@@ -59,15 +64,28 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
             </div>
             <span className="font-semibold text-lg text-white tracking-tight">Financy</span>
           </div>
-          <button
-            onClick={handleShare}
-            title="앱 공유하기"
-            className="w-7 h-7 rounded-lg flex items-center justify-center
-                       text-gray-600 hover:text-brand-400 hover:bg-brand-500/10
-                       transition-all duration-150 active:scale-95 flex-shrink-0"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}
+              title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+              className="w-7 h-7 rounded-lg flex items-center justify-center
+                         text-gray-600 hover:text-amber-400 hover:bg-amber-500/10
+                         transition-all duration-150 active:scale-95 flex-shrink-0"
+            >
+              {theme === 'dark'
+                ? <Sun className="w-3.5 h-3.5" />
+                : <Moon className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={handleShare}
+              title="앱 공유하기"
+              className="w-7 h-7 rounded-lg flex items-center justify-center
+                         text-gray-600 hover:text-brand-400 hover:bg-brand-500/10
+                         transition-all duration-150 active:scale-95 flex-shrink-0"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Nav */}

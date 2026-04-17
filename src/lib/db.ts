@@ -119,6 +119,16 @@ export async function deleteAsset(assetId: string, userId: string): Promise<void
   if (error) throw error
 }
 
+export async function deleteAllAssets(userId: string): Promise<void> {
+  if (!userId) return
+  const { error } = await (supabase as any)
+    .from('assets')
+    .delete()
+    .eq('user_id', userId)
+
+  if (error) throw error
+}
+
 /** localStorage 데이터를 Supabase로 한 번에 마이그레이션 */
 export async function migrateLocalToDb(userId: string, assets: Asset[]): Promise<void> {
   if (!userId || assets.length === 0) return

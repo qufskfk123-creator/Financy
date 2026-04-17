@@ -8,6 +8,7 @@
 import { Sun, Moon, Trash2, Info, User, Palette, LogIn, LogOut, Share2 } from 'lucide-react'
 import { useShare } from '../lib/useShare'
 import Toast from '../components/Toast'
+import { deleteAllAssets } from '../lib/db'
 
 export type Theme = 'dark' | 'light'
 
@@ -16,6 +17,7 @@ interface Props {
   onTheme:    (t: Theme) => void
   userName?:  string | null
   userEmail?: string | null
+  userId?:    string | null
   onAuthClick: () => void
   onSignOut:   () => void
 }
@@ -75,15 +77,19 @@ function ThemeToggle({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) => 
 
 // ── Main ───────────────────────────────────────────────────
 
-export default function Settings({ theme, onTheme, userName, userEmail, onAuthClick, onSignOut }: Props) {
+export default function Settings({ theme, onTheme, userName, userEmail, userId, onAuthClick, onSignOut }: Props) {
   const { handleShare, toastVisible } = useShare()
 
-  const handleClearAll = () => {
-    if (!window.confirm('모든 로컬 데이터(포트폴리오, 거래 내역)를 삭제할까요?\n이 작업은 되돌릴 수 없습니다.')) return
+  const handleClearAll = async () => {
+    if (!window.confirm('모든 데이터(포트폴리오, 거래 내역)를 삭제할까요?\n이 작업은 되돌릴 수 없습니다.')) return
     localStorage.removeItem('financy_assets')
     localStorage.removeItem('financy_transactions')
     localStorage.removeItem('financy_tx_init')
     localStorage.removeItem('financy_prices')
+    localStorage.removeItem('financy_tickers')
+    if (userId) {
+      try { await deleteAllAssets(userId) } catch {}
+    }
     window.location.reload()
   }
 

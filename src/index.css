@@ -372,3 +372,13 @@ aside.bg-gray-900 {
 .safe-area-inset-bottom {
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
 }
+
+/* ── 적응형 중립 배지 (보통 존) ─────────────────────────────── */
+.text-neutral-fg              { color: #CACADE; }
+[data-theme="light"] .text-neutral-fg { color: #1A1A2E; }
+
+.border-neutral-fg              { border-color: rgba(202, 202, 222, 0.40); }
+[data-theme="light"] .border-neutral-fg { border-color: rgba(26, 26, 46, 0.35); }
+
+.bg-neutral-badge              { background-color: rgba(202, 202, 222, 0.08); }
+[data-theme="light"] .bg-neutral-badge { background-color: rgba(26, 26, 46, 0.05); }
