@@ -9,8 +9,8 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getCache } from './lib/cache'
-import type { MarketStatusResponse } from './market-status'
+import { getCache } from './lib/cache.js'
+import type { MarketStatusResponse } from './market-status.js'
 
 export interface TickerItem {
   symbol:    string

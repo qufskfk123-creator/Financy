@@ -60,8 +60,8 @@ async function fetchTreasury(
     const valid = lines.filter(l => !l.includes('.'  ) || l.split(',')[1]?.trim() !== '.')
 
     // 마지막 유효 행 2개 (최신, 전일)
-    const latest = valid.at(-1)?.split(',')
-    const prev   = valid.at(-2)?.split(',')
+    const latest = valid[valid.length - 1]?.split(',')
+    const prev   = valid[valid.length - 2]?.split(',')
     if (!latest) return null
 
     const price     = Number(latest[1])

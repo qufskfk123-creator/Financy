@@ -11,7 +11,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getCache, setCache, TTL } from './lib/cache'
+import { getCache, setCache, TTL } from './lib/cache.js'
 
 export interface IndexQuote {
   ticker:        string
