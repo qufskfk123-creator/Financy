@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
           try {
             if (market === 'Crypto') {
               const r = await fetch('https://api.upbit.com/v1/market/all?isDetails=false')
-              const markets: Array<{ market: string; korean_name: string; english_name: string }> = await r.json()
+              const markets = await r.json() as Array<{ market: string; korean_name: string; english_name: string }>
               const qLow = q.toLowerCase()
               const results = markets
                 .filter(m => m.market.startsWith('KRW-') &&
@@ -95,7 +95,7 @@ export default defineConfig(({ mode }) => {
                 `https://financialmodelingprep.com/stable/treasury-rates?from=${from}&to=${to}&apikey=${FMP_KEY}`,
               )
               if (!r.ok) { res.writeHead(503); res.end(JSON.stringify({ error: 'treasury unavailable' })); return }
-              const data: any[] = await r.json()
+              const data = await r.json() as any[]
               if (!Array.isArray(data) || data.length === 0) { res.writeHead(503); res.end(JSON.stringify({ error: 'no data' })); return }
               const sorted = [...data].sort((a, b) => String(b.date).localeCompare(String(a.date)))
               const latest = sorted[0]
@@ -114,7 +114,7 @@ export default defineConfig(({ mode }) => {
             // ── Upbit Crypto ────────────────────────────────────
             if (ticker.startsWith('KRW-')) {
               const r = await fetch(`https://api.upbit.com/v1/ticker?markets=${encodeURIComponent(ticker)}`)
-              const data: any[] = await r.json()
+              const data = await r.json() as any[]
               const item = data[0]
               if (!item) { res.writeHead(404); res.end(JSON.stringify({ error: 'not found' })); return }
               res.writeHead(200); res.end(JSON.stringify({
@@ -431,6 +431,7 @@ export default defineConfig(({ mode }) => {
       devMarketStatusPlugin(),
     ],
     build: {
+      chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
           manualChunks: { recharts: ['recharts'] },

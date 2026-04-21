@@ -429,8 +429,9 @@ export default function Analytics({ userId }: { userId: string | null }) {
     .sort((a, b) => b.pl - a.pl)
 
   // 실시간 평가손익 데이터
+  type LiveAsset = { id: string; name: string; market: MarketType; ticker: string; currency: 'KRW' | 'USD'; currentVal: number; costVal: number; pl: number; plPct: number; price: number; change: number }
   const liveAssets = assets
-    .map(a => {
+    .map((a): LiveAsset | null => {
       const ticker = resolveTickerForAsset(a)
       if (!ticker) return null
       const priceData = livePrices.get(ticker)
@@ -444,7 +445,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
       const plPct      = costVal > 0 ? (pl / costVal) * 100 : 0
       return { id: a.id, name: a.name, market: a.market, ticker, currency, currentVal, costVal, pl, plPct, price: priceData.price, change: (priceData as any).change ?? 0 }
     })
-    .filter(Boolean) as NonNullable<ReturnType<typeof assets['map']>[number]>[]
+    .filter((x): x is LiveAsset => x !== null)
 
   const hasTickerAssets = assets.some(a => resolveTickerForAsset(a))
   const isFetching = fetchingIds.size > 0
