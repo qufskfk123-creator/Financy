@@ -6,15 +6,12 @@
  *   나스닥    : Finnhub /quote (QQQ ETF 프록시)
  *   KOSPI    : Naver Finance  (m.stock.naver.com 지수 API)
  *
- * 온도 기준 (평균 등락률):
- *   ≥ +2%  → 매우 뜨거움
- *   ≥ +1%  → 뜨거움
- *   ≥ -1%  → 보통
- *   ≥ -2%  → 차가움
- *   < -2%  → 매우 차가움
+ * 캐시 전략: Supabase market_cache (15분 TTL)
+ *   → 사용자 수에 관계없이 Finnhub 호출은 15분에 1번만 발생
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { getCache, setCache, TTL } from './lib/cache'
 
 export interface IndexQuote {
   ticker:        string
@@ -34,6 +31,8 @@ export interface MarketStatusResponse {
   error?:           string
 }
 
+const CACHE_KEY = 'market-status'
+
 function timeoutSignal(ms: number): AbortSignal {
   if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms)
   const ctrl = new AbortController()
@@ -42,8 +41,7 @@ function timeoutSignal(ms: number): AbortSignal {
 }
 
 function round(n: number, d: number) {
-  const f = 10 ** d
-  return Math.round(n * f) / f
+  return Math.round(n * 10 ** d) / 10 ** d
 }
 
 function parseKrwStr(s: string): number {
@@ -59,11 +57,7 @@ function calculateMarketTemperature(avgChgPct: number): { score: number; label: 
   return                       { score, label: '매우 차가움', desc: '주요 지수가 급락 중입니다. 리스크 관리에 집중하세요.' }
 }
 
-// ── Finnhub ETF 프록시 (S&P 500 = SPY, 나스닥 = QQQ) ────────────
-async function fetchFinnhubQuote(
-  symbol: string,
-  apiKey: string,
-): Promise<{ c: number; d: number; dp: number } | null> {
+async function fetchFinnhubQuote(symbol: string, apiKey: string): Promise<{ c: number; d: number; dp: number } | null> {
   try {
     const r = await fetch(
       `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${apiKey}`,
@@ -76,7 +70,6 @@ async function fetchFinnhubQuote(
   } catch { return null }
 }
 
-// ── Naver Finance 지수 API (KOSPI / KOSDAQ) ─────────────────────
 async function fetchNaverIndex(indexCode: string): Promise<{ price: number; change: number; changePercent: number } | null> {
   try {
     const r = await fetch(
@@ -104,8 +97,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET')    return res.status(405).json({ error: 'Method not allowed' })
 
-  const FINNHUB_KEY = process.env.FINNHUB_API_KEY ?? ''
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600')
+
+  // ── 1. Supabase 캐시 조회 (15분 TTL) ─────────────────────────
+  const cached = await getCache<MarketStatusResponse>(CACHE_KEY)
+  if (cached) return res.status(200).json(cached)
+
+  // ── 2. 외부 API 호출 ──────────────────────────────────────────
+  const FINNHUB_KEY = process.env.FINNHUB_API_KEY ?? ''
 
   const [spyRaw, qqqRaw, kospiRaw] = await Promise.all([
     fetchFinnhubQuote('SPY',   FINNHUB_KEY),
@@ -146,10 +145,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   )
   const { score, label, desc } = calculateMarketTemperature(avgChgPct)
 
-  return res.status(200).json({
+  const result: MarketStatusResponse = {
     score, label, desc,
     indices,
     avgChangePercent: avgChgPct,
     updatedAt: new Date().toISOString(),
-  } satisfies Omit<MarketStatusResponse, 'error'>)
+  }
+
+  // ── 3. 캐시 저장 (15분) ───────────────────────────────────────
+  await setCache(CACHE_KEY, result, TTL.MARKET)
+
+  return res.status(200).json(result)
 }

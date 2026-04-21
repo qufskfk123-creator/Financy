@@ -9,6 +9,7 @@ import Settings, { type Theme } from './pages/Settings'
 import Auth from './pages/Auth'
 import ErrorBoundary from './components/ErrorBoundary'
 import AuthModal from './components/AuthModal'
+import TickerTape from './components/TickerTape'
 import { supabase } from './lib/supabase'
 import {
   loadTransactions,
@@ -154,13 +155,17 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-950 overflow-hidden relative">
-      {/* Glassmorphism 배경 스팟 */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true" style={{ zIndex: 0 }}>
-        <div className="absolute w-[600px] h-[600px] -top-56 -left-32 bg-brand-600/5 rounded-full blur-3xl" />
-        <div className="absolute w-[500px] h-[500px] -bottom-48 -right-24 bg-violet-600/4 rounded-full blur-3xl" />
-        <div className="absolute w-[350px] h-[350px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-sky-600/3 rounded-full blur-3xl" />
-      </div>
+    <div className="flex flex-col h-screen bg-gray-950">
+      {/* 상단 전광판 */}
+      <TickerTape />
+
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Glassmorphism 배경 스팟 */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true" style={{ zIndex: 0 }}>
+          <div className="absolute w-[600px] h-[600px] -top-56 -left-32 bg-brand-600/5 rounded-full blur-3xl" />
+          <div className="absolute w-[500px] h-[500px] -bottom-48 -right-24 bg-violet-600/4 rounded-full blur-3xl" />
+          <div className="absolute w-[350px] h-[350px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-sky-600/3 rounded-full blur-3xl" />
+        </div>
       <Sidebar
         currentPage={currentPage}
         onNavigate={handleNavigate}
@@ -217,6 +222,7 @@ export default function App() {
 
       {/* 레거시 인증 모달 (필요 시 사용) */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      </div>
     </div>
   )
 }

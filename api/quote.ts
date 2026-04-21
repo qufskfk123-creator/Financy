@@ -39,32 +39,37 @@ function parseKrwStr(s: string): number {
   return Number(String(s ?? '0').replace(/,/g, '')) || 0
 }
 
-// ── FMP Treasury (^TNX = year10, ^IRX = month3) ───────────────
+// ── FRED Treasury (API 키 불필요, 미 연방준비은행 공식 데이터) ──────────
+// DGS10 = 10년물, DGS3MO = 3개월물
 
 async function fetchTreasury(
   maturity: 'year10' | 'month3',
-  apiKey: string,
 ): Promise<QuoteResponse | null> {
-  const to   = new Date().toISOString().slice(0, 10)
-  const from = new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString().slice(0, 10)
+  const seriesId = maturity === 'year10' ? 'DGS10' : 'DGS3MO'
+  const ticker   = maturity === 'year10' ? '^TNX'  : '^IRX'
   try {
     const r = await fetch(
-      `https://financialmodelingprep.com/stable/treasury-rates?from=${from}&to=${to}&apikey=${apiKey}`,
+      `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`,
       { signal: timeoutSignal(8_000) },
     )
     if (!r.ok) return null
-    const data: Array<Record<string, number | string>> = await r.json()
-    if (!Array.isArray(data) || data.length === 0) return null
+    const text = await r.text()
 
-    const sorted = [...data].sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    const latest = sorted[0]
-    const prev   = sorted[1]
+    // CSV: "DATE,{seriesId}\n2026-04-17,4.34\n..." — 최신순 정렬 아님, 마지막 행이 최신
+    const lines = text.trim().split('\n').slice(1) // 헤더 제거
+    const valid = lines.filter(l => !l.includes('.'  ) || l.split(',')[1]?.trim() !== '.')
 
-    const price     = Number(latest[maturity] ?? 0)
-    const prevPrice = prev ? Number(prev[maturity] ?? price) : price
+    // 마지막 유효 행 2개 (최신, 전일)
+    const latest = valid.at(-1)?.split(',')
+    const prev   = valid.at(-2)?.split(',')
+    if (!latest) return null
+
+    const price     = Number(latest[1])
+    const prevPrice = prev ? Number(prev[1]) : price
+    if (isNaN(price) || price === 0) return null
+
     const change    = price - prevPrice
     const changePct = prevPrice !== 0 ? (change / prevPrice) * 100 : 0
-    const ticker    = maturity === 'year10' ? '^TNX' : '^IRX'
 
     return {
       ticker, symbol: ticker,
@@ -139,7 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── US Treasury ───────────────────────────────────────────────
   if (ticker === '^TNX' || ticker === '^IRX') {
-    const result = await fetchTreasury(ticker === '^TNX' ? 'year10' : 'month3', FMP_KEY)
+    const result = await fetchTreasury(ticker === '^TNX' ? 'year10' : 'month3')
     if (result) return res.status(200).json(result)
     return res.status(503).json({ error: 'Treasury data unavailable' })
   }

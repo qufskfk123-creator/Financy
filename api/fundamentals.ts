@@ -1,9 +1,12 @@
 /**
  * Vercel Serverless Function — /api/fundamentals
  *
- * Financial Modeling Prep (FMP) 무료 티어를 사용합니다.
- * - /profile/{symbol}  : sector, beta, 배당
- * - /quote/{symbol}    : price, PE ratio
+ * Financial Modeling Prep (FMP) 무료 티어 기반 기본 지표 조회
+ *   - /stable/profile : sector, beta, 배당
+ *   - /stable/quote   : price, PE ratio
+ *
+ * 캐시 전략: Supabase market_cache (24시간 TTL, 티커별 키)
+ *   → 동일 티커 재요청 시 FMP 호출 없이 즉시 반환
  *
  * Query params:
  *   tickers — 쉼표 구분 심볼 (예: AAPL,005930.KS)
@@ -11,6 +14,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { getCache, setCache, TTL } from './lib/cache'
 
 export interface FundamentalsResult {
   ticker:         string
@@ -29,16 +33,12 @@ function timeoutSignal(ms: number): AbortSignal {
   return ctrl.signal
 }
 
-async function fetchFmpFundamentals(
-  ticker: string,
-  apiKey: string,
-): Promise<FundamentalsResult> {
+async function fetchFmpFundamentals(ticker: string, apiKey: string): Promise<FundamentalsResult> {
   const empty: FundamentalsResult = {
     ticker, pe_ratio: null, dividend_yield: null,
     beta: null, sector: null, target_price: null, current_price: null,
   }
 
-  // 코인은 fundamentals 없음
   if (ticker.startsWith('KRW-')) return empty
 
   try {
@@ -53,8 +53,8 @@ async function fetchFmpFundamentals(
       ),
     ])
 
-    let profile: Record<string, any> | null = null
-    let quote:   Record<string, any> | null = null
+    let profile: Record<string, unknown> | null = null
+    let quote:   Record<string, unknown> | null = null
 
     if (profileRes.status === 'fulfilled' && profileRes.value.ok) {
       const d = await profileRes.value.json()
@@ -67,9 +67,9 @@ async function fetchFmpFundamentals(
 
     if (!profile && !quote) return empty
 
-    const price        = Number(quote?.price ?? profile?.price ?? 0)
-    const lastDiv      = Number(profile?.lastDividend ?? 0)
-    const divYield     = price > 0 && lastDiv > 0
+    const price    = Number(quote?.price ?? profile?.price ?? 0)
+    const lastDiv  = Number(profile?.lastDividend ?? 0)
+    const divYield = price > 0 && lastDiv > 0
       ? +((lastDiv / price) * 100).toFixed(4)
       : null
 
@@ -78,7 +78,7 @@ async function fetchFmpFundamentals(
       pe_ratio:       quote?.pe       != null ? Number(quote.pe)       : null,
       dividend_yield: divYield,
       beta:           profile?.beta   != null ? Number(profile.beta)   : null,
-      sector:         profile?.sector ?? null,
+      sector:         typeof profile?.sector === 'string' ? profile.sector : null,
       target_price:   null,
       current_price:  price > 0 ? price : null,
     }
@@ -98,14 +98,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const raw = (req.query.tickers as string | undefined)?.trim()
   if (!raw) return res.status(400).json({ error: '`tickers` 파라미터가 필요합니다.' })
 
-  const tickers = raw.split(',').map(t => t.trim()).filter(Boolean).slice(0, 15)
-  const FMP_KEY = process.env.FMP_API_KEY ?? ''
-
+  const tickers  = raw.split(',').map(t => t.trim()).filter(Boolean).slice(0, 15)
+  const FMP_KEY  = process.env.FMP_API_KEY ?? ''
   const results: FundamentalsResult[] = []
+  const toFetch:  string[] = []
+
+  // ── 1. Supabase 캐시 조회 (24시간 TTL) ───────────────────────
   for (const ticker of tickers) {
-    results.push(await fetchFmpFundamentals(ticker, FMP_KEY))
-    if (tickers.length > 1) await new Promise(r => setTimeout(r, 200))
+    const cached = await getCache<FundamentalsResult>(`fundamentals:${ticker}`)
+    if (cached) {
+      results.push(cached)
+    } else {
+      toFetch.push(ticker)
+    }
   }
 
-  return res.status(200).json(results)
+  // ── 2. 캐시 미스 티커만 FMP 호출 ─────────────────────────────
+  for (const ticker of toFetch) {
+    const data = await fetchFmpFundamentals(ticker, FMP_KEY)
+    await setCache(`fundamentals:${ticker}`, data, TTL.FUNDAMENTALS)
+    results.push(data)
+    if (toFetch.length > 1) await new Promise(r => setTimeout(r, 200))
+  }
+
+  // 원래 순서 복원
+  const ordered = tickers.map(t => results.find(r => r.ticker === t) ?? {
+    ticker: t, pe_ratio: null, dividend_yield: null,
+    beta: null, sector: null, target_price: null, current_price: null,
+  } satisfies FundamentalsResult)
+
+  return res.status(200).json(ordered)
 }

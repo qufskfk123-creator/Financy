@@ -86,22 +86,19 @@ export default defineConfig(({ mode }) => {
           const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d
 
           try {
-            // ── FMP Treasury (^TNX, ^IRX) ──────────────────────
+            // ── FRED Treasury (^TNX, ^IRX) — API 키 불필요 ────────
             if (ticker === '^TNX' || ticker === '^IRX') {
-              const maturity = ticker === '^TNX' ? 'year10' : 'month3'
-              const to   = new Date().toISOString().slice(0, 10)
-              const from = new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString().slice(0, 10)
-              const r = await fetch(
-                `https://financialmodelingprep.com/stable/treasury-rates?from=${from}&to=${to}&apikey=${FMP_KEY}`,
-              )
+              const seriesId = ticker === '^TNX' ? 'DGS10' : 'DGS3MO'
+              const r = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`)
               if (!r.ok) { res.writeHead(503); res.end(JSON.stringify({ error: 'treasury unavailable' })); return }
-              const data = await r.json() as any[]
-              if (!Array.isArray(data) || data.length === 0) { res.writeHead(503); res.end(JSON.stringify({ error: 'no data' })); return }
-              const sorted = [...data].sort((a, b) => String(b.date).localeCompare(String(a.date)))
-              const latest = sorted[0]
-              const prev   = sorted[1]
-              const price     = Number(latest[maturity] ?? 0)
-              const prevPrice = prev ? Number(prev[maturity] ?? price) : price
+              const text  = await r.text()
+              const lines = text.trim().split('\n').slice(1)
+              const valid = lines.filter(l => l.split(',')[1]?.trim() !== '.')
+              const latest = valid.at(-1)?.split(',')
+              const prev   = valid.at(-2)?.split(',')
+              if (!latest) { res.writeHead(503); res.end(JSON.stringify({ error: 'no data' })); return }
+              const price     = Number(latest[1])
+              const prevPrice = prev ? Number(prev[1]) : price
               const change    = price - prevPrice
               const changePct = prevPrice !== 0 ? (change / prevPrice) * 100 : 0
               res.writeHead(200); res.end(JSON.stringify({
@@ -418,6 +415,45 @@ export default defineConfig(({ mode }) => {
     }
   }
 
+  // ── /api/ticker-tape ─────────────────────────────────────────
+  function devTickerTapePlugin(): Plugin {
+    return {
+      name: 'dev-api-ticker-tape',
+      configureServer(server) {
+        server.middlewares.use('/api/ticker-tape', async (_req: IncomingMessage, res: ServerResponse) => {
+          res.setHeader('Content-Type', 'application/json')
+          const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d
+          try {
+            const [upbitRes, spyRes, qqqRes] = await Promise.allSettled([
+              fetch('https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH', { headers: { Accept: 'application/json' } }),
+              fetch(`https://finnhub.io/api/v1/quote?symbol=SPY&token=${FINNHUB_KEY}`, { headers: { Accept: 'application/json' } }),
+              fetch(`https://finnhub.io/api/v1/quote?symbol=QQQ&token=${FINNHUB_KEY}`, { headers: { Accept: 'application/json' } }),
+            ])
+            const items: any[] = []
+            if (spyRes.status === 'fulfilled' && spyRes.value.ok) {
+              const d: any = await spyRes.value.json()
+              if (d.c) items.push({ symbol: 'S&P500', name: 'S&P 500', price: d.c, change: d.d ?? 0, changePct: round(d.dp ?? 0, 2), currency: 'USD' })
+            }
+            if (qqqRes.status === 'fulfilled' && qqqRes.value.ok) {
+              const d: any = await qqqRes.value.json()
+              if (d.c) items.push({ symbol: 'NASDAQ', name: '나스닥', price: d.c, change: d.d ?? 0, changePct: round(d.dp ?? 0, 2), currency: 'USD' })
+            }
+            if (upbitRes.status === 'fulfilled' && upbitRes.value.ok) {
+              const data = await upbitRes.value.json() as any[]
+              for (const d of data) {
+                const isBtc = d.market === 'KRW-BTC'
+                items.push({ symbol: isBtc ? 'BTC' : 'ETH', name: isBtc ? 'Bitcoin' : 'Ethereum', price: d.trade_price, change: d.signed_change_price, changePct: round(d.signed_change_rate * 100, 2), currency: 'KRW' })
+              }
+            }
+            res.writeHead(200); res.end(JSON.stringify({ items, updatedAt: new Date().toISOString() }))
+          } catch (e) {
+            res.writeHead(500); res.end(JSON.stringify({ error: String(e), items: [] }))
+          }
+        })
+      },
+    }
+  }
+
   return {
     plugins: [
       react(),
@@ -429,12 +465,13 @@ export default defineConfig(({ mode }) => {
       devMarketNewsPlugin(),
       devFundamentalsPlugin(),
       devMarketStatusPlugin(),
+      devTickerTapePlugin(),
     ],
     build: {
       chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
-          manualChunks: { recharts: ['recharts'] },
+          manualChunks: { recharts: ['recharts'], motion: ['framer-motion'] },
         },
       },
     },

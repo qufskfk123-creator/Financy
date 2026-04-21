@@ -105,8 +105,8 @@ function FearGreedGauge({ value, loading }: { value: number; loading: boolean })
 
   return (
     <div className="w-full select-none" aria-label={`공포 탐욕 지수: ${value}`}>
-      {/* paddingBottom 41% → 200:82 비율 */}
-      <div className="relative" style={{ paddingBottom: '41%' }}>
+      {/* paddingBottom 46% → 200:92 비율 (상단 여백 확보) */}
+      <div className="relative" style={{ paddingBottom: '46%' }}>
 
         {/* ① Recharts Pie */}
         <div className="absolute inset-0">
@@ -119,9 +119,9 @@ function FearGreedGauge({ value, loading }: { value: number; loading: boolean })
                 endAngle={0}
                 cx="50%"
                 cy="100%"
-                innerRadius="110%"
-                outerRadius="160%"
-                cornerRadius={10}
+                innerRadius="135%"
+                outerRadius="155%"
+                cornerRadius={4}
                 paddingAngle={3}
                 strokeWidth={0}
                 isAnimationActive={false}
@@ -141,17 +141,18 @@ function FearGreedGauge({ value, loading }: { value: number; loading: boolean })
         {/* ② SVG 오버레이 — 바늘 + 눈금 */}
         <svg
           className="absolute inset-0 w-full h-full"
-          viewBox="0 0 200 82"
+          viewBox="0 -10 200 92"
           preserveAspectRatio="none"
         >
-          {[25, 50, 75].map(v => {
+          {[0, 25, 50, 75, 100].map(v => {
             const a  = (180 - (v / 100) * 180) * Math.PI / 180
-            const x1 = +(100 + 68 * Math.cos(a)).toFixed(1)
-            const y1 = +(82  - 68 * Math.sin(a)).toFixed(1)
-            const x2 = +(100 + 73 * Math.cos(a)).toFixed(1)
-            const y2 = +(82  - 73 * Math.sin(a)).toFixed(1)
-            const lx = +(100 + 79 * Math.cos(a)).toFixed(1)
-            const ly = +(82  - 79 * Math.sin(a)).toFixed(1)
+            const x1 = +(100 + 72 * Math.cos(a)).toFixed(1)
+            const y1 = +(82  - 72 * Math.sin(a)).toFixed(1)
+            const x2 = +(100 + 76 * Math.cos(a)).toFixed(1)
+            const y2 = +(82  - 76 * Math.sin(a)).toFixed(1)
+            const lx = +(100 + 82 * Math.cos(a)).toFixed(1)
+            // 0과 100은 y=82(하단 경계)에 위치하므로 위로 올려 클리핑 방지
+            const ly = +(82  - 82 * Math.sin(a) - (v === 0 || v === 100 ? 5 : 0)).toFixed(1)
             return (
               <g key={v}>
                 <line x1={x1} y1={y1} x2={x2} y2={y2}
