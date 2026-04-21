@@ -363,7 +363,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
 
 export default function Dashboard() {
   const [fg,      setFg]      = useState<{ data: FearGreedData | null; loading: boolean; error?: string }>({ data: null, loading: true })
-  const [fx,      setFx]      = useState<{ data: FxRate[]; date: string; loading: boolean; error?: string }>({ data: [], date: '', loading: true })
+  const [fx,      setFx]      = useState<{ data: FxRate[]; date: string; publishedAt: string; loading: boolean; error?: string }>({ data: [], date: '', publishedAt: '', loading: true })
   const [tnx,     setTnx]     = useState<{ data: QuoteData | null; loading: boolean }>({ data: null, loading: true })
   const [irx,     setIrx]     = useState<{ data: QuoteData | null; loading: boolean }>({ data: null, loading: true })
   const [news,    setNews]    = useState<{ items: NewsItem[]; loading: boolean; error?: string }>({ items: [], loading: true })
@@ -382,8 +382,8 @@ export default function Dashboard() {
     setFx(p => ({ ...p, loading: true }))
     fetch('/api/exchange-rates')
       .then(r => r.json())
-      .then(d => setFx({ data: d.error ? [] : d.rates, date: d.date ?? '', loading: false, error: d.error }))
-      .catch(e => setFx({ data: [], date: '', loading: false, error: e.message }))
+      .then(d => setFx({ data: d.error ? [] : d.rates, date: d.date ?? '', publishedAt: d.publishedAt ?? '', loading: false, error: d.error }))
+      .catch(e => setFx({ data: [], date: '', publishedAt: '', loading: false, error: e.message }))
 
     setTnx({ data: null, loading: true })
     fetch('/api/quote?ticker=^TNX&exchange=NASDAQ')
@@ -518,7 +518,7 @@ export default function Dashboard() {
 
           {/* ── 환율 상태 ── */}
           <div className="card md:p-5">
-            <SectionTitle icon={DollarSign} title="환율 상태" sub={fx.date ? `기준 ${fx.date}` : undefined} />
+            <SectionTitle icon={DollarSign} title="환율 상태" sub={fx.publishedAt ? `ECB · ${fx.publishedAt} 발표` : undefined} />
 
             {fx.loading ? (
               <div className="space-y-2.5">{[0,1,2].map(i => <Skel key={i} />)}</div>
@@ -546,7 +546,7 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
-            <p className="text-xs text-gray-700 mt-3">Frankfurter.app (ECB) · USD 1 기준</p>
+            <p className="text-xs text-gray-700 mt-3">ECB 기준 (유럽 현지 오후 4시 하루 1회 발표) · USD 기준</p>
           </div>
 
           {/* ── 금리 방향 ── */}

@@ -11,6 +11,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { createClient } from '@supabase/supabase-js'
 
 interface FrankfurterResponse {
   rates: Record<string, number>
@@ -47,6 +48,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Vary', 'Origin')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   if (req.method === 'OPTIONS') return res.status(200).end()
+
+  // Supabase 캐시에서 먼저 조회 (크론이 매일 오전 9시에 갱신)
+  try {
+    const supabaseUrl  = process.env.VITE_SUPABASE_URL  ?? process.env.SUPABASE_URL  ?? ''
+    const supabaseAnon = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? ''
+
+    if (supabaseUrl && supabaseAnon) {
+      const supabase = createClient(supabaseUrl, supabaseAnon)
+      const { data: cache } = await supabase
+        .from('exchange_rates_cache')
+        .select('rates, rate_date, updated_at')
+        .eq('id', 1)
+        .single()
+
+      if (cache?.rates && Array.isArray(cache.rates) && cache.rates.length > 0) {
+        const ageMs = Date.now() - new Date(cache.updated_at as string).getTime()
+        // 23시간 이내 캐시면 그대로 반환
+        if (ageMs < 23 * 60 * 60 * 1000) {
+          res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600')
+          return res.status(200).json({
+            rates:       cache.rates,
+            date:        cache.rate_date,
+            publishedAt: ecbPublishedAtKST(cache.rate_date as string),
+            updatedAt:   cache.updated_at,
+          })
+        }
+      }
+    }
+  } catch {
+    // Supabase 조회 실패 시 live API로 폴백
+  }
 
   try {
     const prevDay = prevBusinessDay()
@@ -91,8 +123,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=7200')
     return res.status(200).json({
       rates,
-      date:      current.date,
-      updatedAt: new Date().toISOString(),
+      date:        current.date,
+      publishedAt: ecbPublishedAtKST(current.date),
+      updatedAt:   new Date().toISOString(),
     })
   } catch {
     // 외부 API 실패 시 최근 기준 더미 환율 반환 — 프론트엔드가 멈추지 않도록
@@ -112,4 +145,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 function round(n: number, d: number) {
   const f = 10 ** d
   return Math.round(n * f) / f
+}
+
+// ECB가 매일 16:00 유럽시간(CET/CEST)에 발표하는 시각을 KST 문자열로 변환
+function ecbPublishedAtKST(ecbDateStr: string): string {
+  // 16:00 CEST = 14:00 UTC (여름, UTC+2), 16:00 CET = 15:00 UTC (겨울, UTC+1)
+  const candidateUtc = new Date(`${ecbDateStr}T14:00:00Z`)
+  const berlinHour = Number(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Berlin', hour: 'numeric', hour12: false })
+      .format(candidateUtc)
+  )
+  const pubUtc = berlinHour === 16 ? candidateUtc : new Date(`${ecbDateStr}T15:00:00Z`)
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: 'numeric', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(pubUtc) + ' KST'
 }
