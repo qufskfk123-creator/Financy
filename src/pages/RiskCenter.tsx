@@ -106,7 +106,7 @@ interface DefenseScores {
   concentrationScore: number; top3Pct: number; top3Names: string[]
 }
 
-function computeDefenseScores(assets: Asset[], seed: SeedData, fxRate: number, krwCash: number, usdCash: number, seedKRW: number): DefenseScores {
+function computeDefenseScores(assets: Asset[], _seed: SeedData, fxRate: number, krwCash: number, usdCash: number, seedKRW: number): DefenseScores {
   // KRW value of each asset
   const assetKRWs = assets.map(a => {
     const cost = holdingCost(a)
@@ -492,8 +492,8 @@ function AllocationBar({ assets, seed, fxRate, krwInvested, usdInvested, krwCash
 
 // ── 종목별 집중도 분석 ────────────────────────────────────
 
-function ConcentrationAnalysis({ assets, seed, fxRate, seedKRW }: {
-  assets: Asset[]; seed: SeedData; fxRate: number; seedKRW: number
+function ConcentrationAnalysis({ assets, fxRate, seedKRW }: {
+  assets: Asset[]; fxRate: number; seedKRW: number
 }) {
   if (assets.length === 0) return null
   const denominator = seedKRW > 0 ? seedKRW :
@@ -563,8 +563,8 @@ const FX_SCENARIOS = [
   { pct:  15, label: '원화 약세 +15%' },
 ]
 
-function FxRiskAccordion({ fxRate, totalUsdExp, usdInvested, usdCash, seedKRW }: {
-  fxRate: number; totalUsdExp: number; usdInvested: number; usdCash: number; seedKRW: number
+function FxRiskAccordion({ fxRate, totalUsdExp, seedKRW }: {
+  fxRate: number; totalUsdExp: number; seedKRW: number
 }) {
   const [open, setOpen] = useState(false)
   if (totalUsdExp <= 0) return null
@@ -613,13 +613,12 @@ function FxRiskAccordion({ fxRate, totalUsdExp, usdInvested, usdCash, seedKRW }:
             <p className="text-[11px] text-gray-500">
               환율 변동 시 원화 환산 변화 {seedKRW > 0 && <span className="text-gray-700">· 시드 {fmtW(seedKRW)} 대비</span>}
             </p>
-            {FX_SCENARIOS.map(({ pct, label }) => {
+            {FX_SCENARIOS.map(({ pct }) => {
               const newRate    = fxRate * (1 + pct / 100)
               const changeKRW  = totalUsdExp * (newRate - fxRate)
               const isGain     = changeKRW > 0
               const pctOfSeed  = seedKRW > 0 ? (Math.abs(changeKRW) / seedKRW) * 100 : 0
               const isCore     = Math.abs(pct) <= 5
-              const rc         = riskColor(isGain ? 80 : (Math.abs(pct) >= 10 ? 20 : 45))
               return (
                 <div key={pct} className={`flex items-center gap-3 px-3 py-2 rounded-xl border transition-all ${
                   isGain
@@ -755,12 +754,6 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
 // ── 리스크 지수 카드 ─────────────────────────────────────
 
 interface MktData { fg: { value: number; classification: string } | null; fx: { code: string; rate: number; changePct: number }[]; tnx: { price: number; changePercent: number } | null; irx: { price: number; changePercent: number } | null }
-const RISK_LEVEL = {
-  low:     { label: '낮음',      score: 20 },
-  medium:  { label: '보통',      score: 50 },
-  high:    { label: '높음',      score: 75 },
-  extreme: { label: '매우 높음', score: 92 },
-} as const
 
 function RiskScoreCard({ assets }: { assets: Asset[] }) {
   const [mkt, setMkt]         = useState<MktData>({ fg: null, fx: [], tnx: null, irx: null })
@@ -871,7 +864,7 @@ export default function RiskCenter({ seed, userId }: { seed: SeedData; userId: s
 
   useEffect(() => { loadData() }, [loadData])
 
-  const { krwInvested, usdInvested, krwCash, usdCash, totalUsdExp, totalKRW, seedKRW } = calcTotals(assets, seed, fxRate)
+  const { krwInvested, usdInvested, krwCash, usdCash, totalUsdExp, seedKRW } = calcTotals(assets, seed, fxRate)
   const hasSeed  = seed.krw > 0 || seed.usd > 0
   const hasAssets = assets.length > 0
 
@@ -949,11 +942,10 @@ export default function RiskCenter({ seed, userId }: { seed: SeedData; userId: s
             krwCash={krwCash} usdCash={usdCash} />
 
           {/* 5. 종목별 집중도 */}
-          <ConcentrationAnalysis assets={assets} seed={seed} fxRate={fxRate} seedKRW={seedKRW} />
+          <ConcentrationAnalysis assets={assets} fxRate={fxRate} seedKRW={seedKRW} />
 
           {/* 6. 외환 리스크 아코디언 (달러 노출 시만 표시) */}
-          <FxRiskAccordion fxRate={fxRate} totalUsdExp={totalUsdExp}
-            usdInvested={usdInvested} usdCash={usdCash} seedKRW={seedKRW} />
+          <FxRiskAccordion fxRate={fxRate} totalUsdExp={totalUsdExp} seedKRW={seedKRW} />
 
           {/* 7. 시드머니 현황 */}
           <SeedSummaryCard seed={seed} fxRate={fxRate}

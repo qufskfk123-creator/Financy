@@ -23,13 +23,9 @@ import {
   Minus,
   X,
   Trash2,
-  ShieldAlert,
   PieChart,
-  ChevronRight,
   ChevronDown,
   AlertTriangle,
-  DollarSign,
-  Activity,
   TrendingDown,
   TrendingUp,
   ArrowDownLeft,
@@ -182,13 +178,6 @@ const MARKET_CONFIG: Record<MarketType, {
   },
 }
 
-const RISK_LEVEL = {
-  low:     { label: '낮음',      color: 'text-emerald-400', ring: 'stroke-emerald-400', gradFrom: 'from-emerald-500/8'  },
-  medium:  { label: '보통',      color: 'text-amber-400',   ring: 'stroke-amber-400',   gradFrom: 'from-amber-500/8'    },
-  high:    { label: '높음',      color: 'text-orange-400',  ring: 'stroke-orange-400',  gradFrom: 'from-orange-500/8'   },
-  extreme: { label: '매우 높음', color: 'text-rose-400',    ring: 'stroke-rose-400',    gradFrom: 'from-rose-500/8'     },
-} as const
-
 // ── localStorage ───────────────────────────────────────────
 
 const STORAGE_KEY = 'financy_assets'
@@ -259,198 +248,7 @@ function MarketBadge({ market }: { market: MarketType }) {
   )
 }
 
-// ── RiskIndexCard ──────────────────────────────────────────
 
-interface MarketData {
-  fg:  { value: number; classification: string } | null
-  fx:  { code: string; rate: number; changePct: number }[]
-  tnx: { price: number; changePercent: number } | null
-  irx: { price: number; changePercent: number } | null
-}
-
-function calcRisk(assets: Asset[], data: MarketData) {
-  const { fg, fx, tnx, irx } = data
-  const krwRate   = fx.find(f => f.code === 'KRW')?.rate ?? 1_350
-  const krwChgAbs = Math.abs(fx.find(f => f.code === 'KRW')?.changePct ?? 0)
-  const fgValue   = fg?.value ?? 50
-  const inverted  = tnx && irx && irx.price > 0 && tnx.price < irx.price
-  const tnxUp     = tnx && tnx.changePercent > 0.3
-
-  // 실제 보유금액 기준
-  const byKrw: Record<MarketType, number> = { 'K-Stock': 0, 'U-Stock': 0, 'Crypto': 0, 'Cash': 0 }
-  let totalKrw = 0
-  for (const a of assets) {
-    const cost = holdingCost(a)
-    const vKrw = MARKET_CONFIG[a.market].currency === 'KRW' ? cost : cost * krwRate
-    byKrw[a.market] += vKrw
-    totalKrw += vKrw
-  }
-  if (totalKrw === 0) return null
-
-  const w: Record<MarketType, number> = {
-    'K-Stock': byKrw['K-Stock'] / totalKrw,
-    'U-Stock': byKrw['U-Stock'] / totalKrw,
-    'Crypto':  byKrw['Crypto']  / totalKrw,
-    'Cash':    byKrw['Cash']    / totalKrw,
-  }
-
-  const score = Math.round(
-    w['Crypto']  * Math.min(100, fgValue) +
-    w['U-Stock'] * Math.min(100, fgValue * 0.55 + krwChgAbs * 18 + (inverted ? 18 : 0) + (tnxUp ? 8 : 0)) +
-    w['K-Stock'] * Math.min(100, fgValue * 0.35 + (inverted ? 22 : 0) + (tnxUp ? 12 : 0)) +
-    w['Cash']    * 8,
-  )
-  const level: 'low' | 'medium' | 'high' | 'extreme' =
-    score < 30 ? 'low' : score < 55 ? 'medium' : score < 75 ? 'high' : 'extreme'
-
-  const desc = {
-    low: '현재 포트폴리오는 상대적으로 안정적입니다.',
-    medium: '일부 리스크 요인이 있습니다. 분산투자를 유지하세요.',
-    high: '시장 변동성에 취약합니다. 리스크 관리가 필요합니다.',
-    extreme: '포트폴리오가 고위험 상태입니다. 방어적 비중 조절을 검토하세요.',
-  }[level]
-
-  const insights: string[] = []
-  if (w['U-Stock'] > 0.25) {
-    const kfx = fx.find(f => f.code === 'KRW')
-    if (kfx) insights.push(`미국주식 ${Math.round(w['U-Stock'] * 100)}% 비중 — ${kfx.changePct > 0 ? '원화 약세(환율↑), 달러 자산 원화가치 증가' : '원화 강세(환율↓), 달러 자산 원화가치 감소'} (USD/KRW ${kfx.rate.toFixed(0)})`)
-  }
-  if (w['Crypto'] > 0.15 && fg) {
-    const mood = fgValue > 65 ? '탐욕 과열 — 고점 경계' : fgValue < 35 ? '공포 저점 — 매수 기회' : '중립 — 관망 권장'
-    insights.push(`가상자산 ${Math.round(w['Crypto'] * 100)}% 비중 — 공포/탐욕 ${fgValue}점 (${mood})`)
-  }
-  if (inverted) insights.push('장단기 금리 역전 지속 — 경기 침체 선행 신호, 방어적 포트폴리오 유지 권장')
-  if (w['Cash'] > 0.35) insights.push(`현금 비중 ${Math.round(w['Cash'] * 100)}% — 인플레이션 대비 실질수익률 점검 권장`)
-
-  return { score, level, desc, insights, weights: w, byKrw, totalKrw }
-}
-
-function RiskIndexCard({ assets }: { assets: Asset[] }) {
-  const [mkt, setMkt]         = useState<MarketData>({ fg: null, fx: [], tnx: null, irx: null })
-  const [loading, setLoading] = useState(true)
-  const [noApi, setNoApi]     = useState(false)
-  const hasAssets = assets.length > 0
-
-  useEffect(() => {
-    if (!hasAssets) return
-    let cancelled = false
-    setLoading(true)
-    Promise.allSettled([
-      fetch('/api/fear-greed').then(r => r.json()),
-      fetch('/api/exchange-rates').then(r => r.json()),
-      fetch('/api/quote?ticker=^TNX&exchange=NASDAQ').then(r => r.json()),
-      fetch('/api/quote?ticker=^IRX&exchange=NASDAQ').then(r => r.json()),
-    ]).then(([fgR, fxR, tnxR, irxR]) => {
-      if (cancelled) return
-      const d: MarketData = { fg: null, fx: [], tnx: null, irx: null }
-      if (fgR.status  === 'fulfilled' && !fgR.value.error)   d.fg  = fgR.value
-      if (fxR.status  === 'fulfilled' && !fxR.value.error)   d.fx  = fxR.value.rates ?? []
-      if (tnxR.status === 'fulfilled' && tnxR.value?.price)  d.tnx = tnxR.value
-      if (irxR.status === 'fulfilled' && irxR.value?.price)  d.irx = irxR.value
-      setMkt(d); setNoApi(!d.fg && !d.fx.length && !d.tnx); setLoading(false)
-    })
-    return () => { cancelled = true }
-  }, [hasAssets])
-
-  if (!hasAssets) return null
-
-  const result = !loading ? calcRisk(assets, mkt) : null
-  const score = result?.score ?? 0
-  const level = result?.level ?? 'low'
-  const rc = RISK_LEVEL[level]
-  const RADIUS = 48, CIRC = 2 * Math.PI * RADIUS
-
-  return (
-    <div className={`card bg-gradient-to-br ${rc.gradFrom} to-transparent space-y-4`}>
-      <div className="flex items-center gap-2">
-        <ShieldAlert className="w-4 h-4 text-gray-400" />
-        <span className="text-sm font-semibold text-gray-200">현재 포트폴리오 위험 지수</span>
-        {loading  && <span className="ml-auto text-[10px] text-gray-600 animate-pulse">분석 중…</span>}
-        {!loading && noApi && <span className="ml-auto text-[10px] text-amber-600">시장 데이터 없음</span>}
-      </div>
-
-      <div className="flex items-center gap-5">
-        <div className="relative flex-shrink-0" style={{ width: 108, height: 108 }}>
-          <svg width="108" height="108" viewBox="0 0 120 120" className="-rotate-90">
-            <circle cx="60" cy="60" r={RADIUS} fill="none" stroke="#1f2937" strokeWidth="12" />
-            {!loading && <circle cx="60" cy="60" r={RADIUS} fill="none" strokeWidth="12" strokeLinecap="round"
-              className={`${rc.ring} transition-all duration-700`}
-              strokeDasharray={`${CIRC * score / 100} ${CIRC}`} />}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {loading
-              ? <div className="w-9 h-9 rounded-full bg-gray-800 animate-pulse" />
-              : <><span className={`text-2xl font-bold mono ${rc.color}`}>{score}</span><span className="text-[10px] text-gray-600">/ 100</span></>}
-          </div>
-        </div>
-
-        <div className="flex-1 min-w-0 space-y-2">
-          {loading
-            ? <div className="space-y-2"><div className="h-5 w-16 bg-gray-800 rounded animate-pulse" /><div className="h-3 w-full bg-gray-800 rounded animate-pulse" /></div>
-            : <>
-                <div>
-                  <p className={`text-xl font-bold ${rc.color}`}>{rc.label}</p>
-                  <p className="text-xs text-gray-500 leading-snug mt-0.5">{result?.desc}</p>
-                </div>
-                {result && result.weights['U-Stock'] > 0.25 && mkt.fx.length > 0 && (() => {
-                  const kfx = mkt.fx.find(f => f.code === 'KRW')!
-                  return (
-                    <div className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2">
-                      <DollarSign className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                      <div><p className="text-[10px] font-semibold text-red-300">환율 변동 — 자산가치 영향 주시</p>
-                      <p className="text-[10px] text-red-400/80 mono">USD/KRW {kfx.rate.toFixed(0)} ({kfx.changePct >= 0 ? '+' : ''}{kfx.changePct.toFixed(2)}%)</p></div>
-                    </div>
-                  )
-                })()}
-                {result && result.weights['Crypto'] > 0.15 && mkt.fg && (() => {
-                  const v = mkt.fg!.value
-                  const cls = v > 65 ? 'bg-rose-500/10 border-rose-500/20 text-rose-300 [&_p]:text-rose-400/80'
-                    : v < 35 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300 [&_p]:text-emerald-400/80'
-                    : 'bg-amber-500/10 border-amber-500/20 text-amber-300 [&_p]:text-amber-400/80'
-                  return (
-                    <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${cls}`}>
-                      <Activity className="w-3.5 h-3.5 flex-shrink-0" />
-                      <div><p className="text-[10px] font-semibold">공포/탐욕 — 가상자산 직결 신호</p>
-                      <p className="text-[10px] mono">{v}점 — {mkt.fg!.classification}</p></div>
-                    </div>
-                  )
-                })()}
-              </>}
-        </div>
-      </div>
-
-      {result && result.totalKrw > 0 && (
-        <div className="space-y-1.5">
-          <div className="flex h-2 rounded-full overflow-hidden gap-px">
-            {(['K-Stock', 'U-Stock', 'Crypto', 'Cash'] as MarketType[]).map(m => {
-              const pct = result.weights[m] * 100
-              if (pct < 0.5) return null
-              return <div key={m} className={`h-full ${MARKET_CONFIG[m].barCls} opacity-75`} style={{ width: `${pct}%` }} />
-            })}
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-            {(['K-Stock', 'U-Stock', 'Crypto', 'Cash'] as MarketType[]).map(m => {
-              const pct = result.weights[m] * 100
-              if (pct < 1) return null
-              return <span key={m} className={`text-[10px] ${MARKET_CONFIG[m].textCls}`}>{MARKET_CONFIG[m].label} {Math.round(pct)}%</span>
-            })}
-          </div>
-        </div>
-      )}
-
-      {result && result.insights.length > 0 && (
-        <div className="space-y-1.5 border-t border-gray-800 pt-3">
-          {result.insights.map((s, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <ChevronRight className="w-3 h-3 mt-0.5 flex-shrink-0 text-gray-600" />
-              <p className="text-xs text-gray-400 leading-snug">{s}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── SeedInput (이중 통화) ──────────────────────────────────
 

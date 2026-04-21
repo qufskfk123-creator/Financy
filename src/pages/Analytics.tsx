@@ -688,7 +688,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
                   data={pieData} cx="50%" cy="50%" outerRadius={80} innerRadius={50}
                   paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}
                   animationBegin={0} animationDuration={1500} animationEasing="ease-out"
-                  activeIndex={barActiveIdx} activeShape={renderActivePieShape}
+                  {...({ activeIndex: barActiveIdx, activeShape: renderActivePieShape } as object)}
                   onMouseEnter={(_, index) => setBarActiveIdx(index)}
                   onMouseLeave={() => setBarActiveIdx(undefined)}>
                   {pieData.map((entry, index) => <Cell key={`bar-cell-${index}`} fill={entry.color} />)}
