@@ -91,6 +91,18 @@ export type InvestmentPrincipleCheckRow = {
 export type InvestmentPrincipleCheckInsert = Omit<InvestmentPrincipleCheckRow, 'id' | 'created_at'>
 
 // ──────────────────────────────────────────
+// Chat 메시지 Row 타입
+// ──────────────────────────────────────────
+
+export type ChatMessageRow = {
+  id:         string
+  user_id:    string
+  user_name:  string
+  content:    string
+  created_at: string
+}
+
+// ──────────────────────────────────────────
 // Supabase Database 제네릭 타입 (client 추론용)
 // ──────────────────────────────────────────
 
@@ -172,6 +184,24 @@ export interface Database {
           principle_title?: string
           is_checked?:      boolean
           created_at?:      string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: ChatMessageRow
+        Insert: {
+          id?:        string
+          user_id:    string
+          user_name:  string
+          content:    string
+          created_at?: string
+        }
+        Update: {
+          id?:        string
+          user_id?:   string
+          user_name?: string
+          content?:   string
+          created_at?: string
         }
         Relationships: []
       }
