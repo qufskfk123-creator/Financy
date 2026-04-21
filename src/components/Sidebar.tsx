@@ -1,7 +1,7 @@
 import {
   LayoutDashboard,
   PieChart,
-  ArrowLeftRight,
+  ShieldAlert,
   BarChart3,
   Settings,
   Zap,
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useShare } from '../lib/useShare'
 import Toast from './Toast'
+import EmojiAvatar from './EmojiAvatar'
 import type { Page } from '../App'
 import type { Theme } from '../pages/Settings'
 
@@ -26,7 +27,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'dashboard',    label: '기상도',     icon: LayoutDashboard },
   { id: 'portfolio',    label: '포트폴리오',  icon: PieChart },
-  { id: 'transactions', label: '거래 내역',   icon: ArrowLeftRight },
+  { id: 'risk-center',  label: '리스크 센터', icon: ShieldAlert },
   { id: 'analytics',    label: '분석',        icon: BarChart3 },
   { id: 'settings',     label: '설정',        icon: Settings },
 ]
@@ -34,22 +35,25 @@ const navItems: NavItem[] = [
 const bottomNavItems: NavItem[] = [
   { id: 'dashboard',    label: '기상도',    icon: LayoutDashboard },
   { id: 'portfolio',    label: '포트폴리오', icon: PieChart },
-  { id: 'transactions', label: '거래',      icon: ArrowLeftRight },
+  { id: 'risk-center',  label: '리스크',    icon: ShieldAlert },
+  { id: 'analytics',    label: '분석',      icon: BarChart3 },
   { id: 'settings',     label: '설정',      icon: Settings },
 ]
 
 interface SidebarProps {
-  currentPage: Page
-  onNavigate:  (page: Page) => void
-  userName?:   string | null
-  userEmail?:  string | null
-  onAuthClick: () => void
-  onSignOut:   () => void
-  theme:       Theme
-  onTheme:     (t: Theme) => void
+  currentPage:  Page
+  onNavigate:   (page: Page) => void
+  userName?:    string | null
+  userEmail?:   string | null
+  userAvatar?:  string | null
+  avatarColor:  string
+  onAuthClick:  () => void
+  onSignOut:    () => void
+  theme:        Theme
+  onTheme:      (t: Theme) => void
 }
 
-export default function Sidebar({ currentPage, onNavigate, userName, userEmail, onAuthClick, onSignOut, theme, onTheme }: SidebarProps) {
+export default function Sidebar({ currentPage, onNavigate, userName, userEmail, userAvatar, avatarColor, onAuthClick, onSignOut, theme, onTheme }: SidebarProps) {
   const { handleShare, toastVisible } = useShare()
 
   return (
@@ -115,9 +119,7 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
         <div className="p-4 border-t border-gray-800 space-y-2">
           <div className="flex items-center gap-3 px-2">
             {userName ? (
-              <div className="w-8 h-8 rounded-full bg-brand-600/20 border border-brand-600/30 flex items-center justify-center flex-shrink-0">
-                <span className="text-sm font-bold text-brand-400">{userName.charAt(0).toUpperCase()}</span>
-              </div>
+              <EmojiAvatar emoji={userAvatar} color={avatarColor} size="sm" />
             ) : (
               <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
                 <User className="w-4 h-4 text-gray-400" />

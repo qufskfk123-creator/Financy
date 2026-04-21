@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Transaction } from '../lib/transactions'
+import type { SeedData } from '../lib/seed'
 import {
   fetchAssets,
   upsertAsset,
@@ -451,6 +452,262 @@ function RiskIndexCard({ assets }: { assets: Asset[] }) {
   )
 }
 
+// ── SeedInput (이중 통화) ──────────────────────────────────
+
+function SeedInput({ seed, onChange }: { seed: SeedData; onChange: (v: SeedData) => void }) {
+  const [editKrw, setEditKrw]   = useState(false)
+  const [editUsd, setEditUsd]   = useState(false)
+  const [draftKrw, setDraftKrw] = useState('')
+  const [draftUsd, setDraftUsd] = useState('')
+  const [fxRate, setFxRate]     = useState(1350)
+  const krwRef = useRef<HTMLInputElement>(null)
+  const usdRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    fetch('/api/exchange-rates').then(r => r.json()).then(d => {
+      const krw = (d.rates as Array<{ code: string; rate: number }> | undefined)?.find(r => r.code === 'KRW')
+      if (krw?.rate) setFxRate(krw.rate)
+    }).catch(() => {})
+  }, [])
+
+  const hasSeed  = seed.krw > 0 || seed.usd > 0
+  const totalKRW = seed.krw + seed.usd * fxRate
+
+  const startKrw = () => { setDraftKrw(seed.krw > 0 ? String(seed.krw) : ''); setEditKrw(true); setTimeout(() => krwRef.current?.focus(), 0) }
+  const startUsd = () => { setDraftUsd(seed.usd > 0 ? String(seed.usd) : ''); setEditUsd(true); setTimeout(() => usdRef.current?.focus(), 0) }
+  const commitKrw = () => { const v = Number(draftKrw.replace(/,/g, '')); if (!isNaN(v) && v >= 0) onChange({ ...seed, krw: v }); setEditKrw(false) }
+  const commitUsd = () => { const v = Number(draftUsd.replace(/,/g, '')); if (!isNaN(v) && v >= 0) onChange({ ...seed, usd: v }); setEditUsd(false) }
+
+  return (
+    <div className="card !py-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">총 투자 시드머니</p>
+        {hasSeed && (
+          <div className="text-right">
+            <p className="text-[10px] text-gray-600">통합 자산가치 (KRW 환산)</p>
+            <p className="text-sm font-bold mono text-brand-400">
+              ₩{totalKRW.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {/* 원화 시드 */}
+        <div className="rounded-xl bg-blue-500/8 border border-blue-500/20 px-3 py-2.5 space-y-1.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[11px]">🇰🇷</span>
+            <p className="text-[10px] text-blue-400 font-semibold">원화 시드 (KRW)</p>
+          </div>
+          {editKrw ? (
+            <div className="flex items-center gap-1">
+              <span className="text-blue-400 text-sm flex-shrink-0">₩</span>
+              <input ref={krwRef} type="number" min="0" step="1000000" value={draftKrw}
+                onChange={e => setDraftKrw(e.target.value)}
+                onBlur={commitKrw}
+                onKeyDown={e => { if (e.key === 'Enter') commitKrw(); if (e.key === 'Escape') setEditKrw(false) }}
+                className="flex-1 min-w-0 bg-gray-900 border border-blue-500 rounded-lg px-2 py-1 text-sm font-bold text-gray-100 outline-none mono"
+              />
+            </div>
+          ) : (
+            <button onClick={startKrw} className="w-full text-left group">
+              <p className={`text-base font-bold mono ${seed.krw > 0 ? 'text-blue-300 group-hover:text-blue-200' : 'text-blue-700 group-hover:text-blue-600'}`}>
+                {seed.krw > 0 ? `₩${seed.krw.toLocaleString('ko-KR')}` : '+ 입력'}
+              </p>
+            </button>
+          )}
+        </div>
+
+        {/* 달러 시드 */}
+        <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/20 px-3 py-2.5 space-y-1.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[11px]">🇺🇸</span>
+            <p className="text-[10px] text-emerald-400 font-semibold">달러 시드 (USD)</p>
+          </div>
+          {editUsd ? (
+            <div className="flex items-center gap-1">
+              <span className="text-emerald-400 text-sm flex-shrink-0">$</span>
+              <input ref={usdRef} type="number" min="0" step="100" value={draftUsd}
+                onChange={e => setDraftUsd(e.target.value)}
+                onBlur={commitUsd}
+                onKeyDown={e => { if (e.key === 'Enter') commitUsd(); if (e.key === 'Escape') setEditUsd(false) }}
+                className="flex-1 min-w-0 bg-gray-900 border border-emerald-500 rounded-lg px-2 py-1 text-sm font-bold text-gray-100 outline-none mono"
+              />
+            </div>
+          ) : (
+            <button onClick={startUsd} className="w-full text-left group">
+              <p className={`text-base font-bold mono ${seed.usd > 0 ? 'text-emerald-300 group-hover:text-emerald-200' : 'text-emerald-700 group-hover:text-emerald-600'}`}>
+                {seed.usd > 0 ? `$${seed.usd.toLocaleString('en-US')}` : '+ 입력'}
+              </p>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {seed.usd > 0 && (
+        <p className="text-[10px] text-gray-700 text-right">USD/KRW {fxRate.toLocaleString('ko-KR')} · 리스크 센터에서 환율 분석 가능</p>
+      )}
+    </div>
+  )
+}
+
+// ── AllocationBar (이중 통화) ──────────────────────────────
+
+function AllocationBar({ assets, seed }: { assets: Asset[]; seed: SeedData }) {
+  const [fxRate, setFxRate] = useState(1350)
+
+  useEffect(() => {
+    fetch('/api/exchange-rates').then(r => r.json()).then(d => {
+      const krw = (d.rates as Array<{ code: string; rate: number }> | undefined)?.find(r => r.code === 'KRW')
+      if (krw?.rate) setFxRate(krw.rate)
+    }).catch(() => {})
+  }, [])
+
+  // 원화 자산 (KRW): K-Stock, Cash
+  const krwByMkt: Partial<Record<MarketType, number>> = {}
+  let krwInvested = 0
+  for (const a of assets) {
+    if (MARKET_CONFIG[a.market].currency !== 'KRW') continue
+    const c = holdingCost(a)
+    krwByMkt[a.market] = (krwByMkt[a.market] ?? 0) + c
+    krwInvested += c
+  }
+
+  // 달러 자산 (USD): U-Stock, Crypto
+  const usdByMkt: Partial<Record<MarketType, number>> = {}
+  let usdInvested = 0
+  for (const a of assets) {
+    if (MARKET_CONFIG[a.market].currency !== 'USD') continue
+    const c = holdingCost(a)
+    usdByMkt[a.market] = (usdByMkt[a.market] ?? 0) + c
+    usdInvested += c
+  }
+
+  const krwCash     = seed.krw > 0 ? Math.max(0, seed.krw - krwInvested) : 0
+  const usdCash     = seed.usd > 0 ? Math.max(0, seed.usd - usdInvested) : 0
+  const krwDenom    = seed.krw > 0 ? seed.krw : (krwInvested || 1)
+  const usdDenom    = seed.usd > 0 ? seed.usd : (usdInvested || 1)
+  const hasKrw      = krwInvested > 0 || krwCash > 0
+  const hasUsd      = usdInvested > 0 || usdCash > 0
+
+  // KRW 바 세그먼트 (파랑 계열)
+  const KRW_COLORS: Partial<Record<MarketType, { bar: string; text: string }>> = {
+    'K-Stock': { bar: 'bg-blue-500',  text: 'text-blue-400' },
+    'Cash':    { bar: 'bg-sky-400',   text: 'text-sky-400' },
+  }
+  // USD 바 세그먼트 (초록 계열)
+  const USD_COLORS: Partial<Record<MarketType, { bar: string; text: string }>> = {
+    'U-Stock': { bar: 'bg-emerald-500', text: 'text-emerald-400' },
+    'Crypto':  { bar: 'bg-teal-400',    text: 'text-teal-400' },
+  }
+
+  if (!hasKrw && !hasUsd) return null
+
+  return (
+    <div className="card space-y-4">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">자산 배분</p>
+
+      {/* ── 원화 자산 바 ── */}
+      {hasKrw && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center gap-1.5">
+              <span>🇰🇷</span>
+              <span className="font-semibold text-blue-400">원화 자산 (KRW)</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-500">
+              <span className="mono">투자 ₩{krwInvested.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
+              {krwCash > 0 && <span className="mono text-gray-600">잔여 ₩{krwCash.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>}
+              {seed.krw > 0 && (
+                <span className={`font-semibold ${krwInvested > seed.krw ? 'text-amber-400' : 'text-blue-400'}`}>
+                  {Math.min(999, krwInvested / krwDenom * 100).toFixed(1)}%
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="h-4 flex rounded-full overflow-hidden gap-px bg-gray-800/80">
+            {(['K-Stock', 'Cash'] as MarketType[]).filter(m => (krwByMkt[m] ?? 0) > 0).map(m => (
+              <div key={m}
+                className={`h-full ${KRW_COLORS[m]?.bar} transition-all duration-700`}
+                style={{ width: `${Math.min(100, (krwByMkt[m]! / krwDenom) * 100)}%` }}
+                title={`${MARKET_CONFIG[m].label} ${((krwByMkt[m]! / krwDenom) * 100).toFixed(1)}%`}
+              />
+            ))}
+            {krwCash > 0 && (
+              <div className="h-full bg-blue-900/60 transition-all duration-700"
+                style={{ width: `${Math.min(100, (krwCash / krwDenom) * 100)}%` }} />
+            )}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {(['K-Stock', 'Cash'] as MarketType[]).filter(m => (krwByMkt[m] ?? 0) > 0).map(m => (
+              <span key={m} className={`flex items-center gap-1 text-[10px] ${KRW_COLORS[m]?.text}`}>
+                <span className={`w-2 h-2 rounded-sm inline-block ${KRW_COLORS[m]?.bar}`} />
+                {MARKET_CONFIG[m].label} {((krwByMkt[m]! / krwDenom) * 100).toFixed(1)}%
+              </span>
+            ))}
+            {krwCash > 0 && (
+              <span className="flex items-center gap-1 text-[10px] text-blue-700">
+                <span className="w-2 h-2 rounded-sm inline-block bg-blue-900/60" />
+                현금 잔여 {(krwCash / krwDenom * 100).toFixed(1)}%
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 달러 자산 바 ── */}
+      {hasUsd && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center gap-1.5">
+              <span>🇺🇸</span>
+              <span className="font-semibold text-emerald-400">달러 자산 (USD)</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-500">
+              <span className="mono">투자 ${usdInvested.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+              {usdCash > 0 && <span className="mono text-gray-600">잔여 ${usdCash.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>}
+              {seed.usd > 0 && (
+                <span className={`font-semibold ${usdInvested > seed.usd ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {Math.min(999, usdInvested / usdDenom * 100).toFixed(1)}%
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="h-4 flex rounded-full overflow-hidden gap-px bg-gray-800/80">
+            {(['U-Stock', 'Crypto'] as MarketType[]).filter(m => (usdByMkt[m] ?? 0) > 0).map(m => (
+              <div key={m}
+                className={`h-full ${USD_COLORS[m]?.bar} transition-all duration-700`}
+                style={{ width: `${Math.min(100, (usdByMkt[m]! / usdDenom) * 100)}%` }}
+                title={`${MARKET_CONFIG[m].label} ${((usdByMkt[m]! / usdDenom) * 100).toFixed(1)}%`}
+              />
+            ))}
+            {usdCash > 0 && (
+              <div className="h-full bg-emerald-900/60 transition-all duration-700"
+                style={{ width: `${Math.min(100, (usdCash / usdDenom) * 100)}%` }} />
+            )}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {(['U-Stock', 'Crypto'] as MarketType[]).filter(m => (usdByMkt[m] ?? 0) > 0).map(m => (
+              <span key={m} className={`flex items-center gap-1 text-[10px] ${USD_COLORS[m]?.text}`}>
+                <span className={`w-2 h-2 rounded-sm inline-block ${USD_COLORS[m]?.bar}`} />
+                {MARKET_CONFIG[m].label} {((usdByMkt[m]! / usdDenom) * 100).toFixed(1)}%
+              </span>
+            ))}
+            {usdCash > 0 && (
+              <span className="flex items-center gap-1 text-[10px] text-emerald-700">
+                <span className="w-2 h-2 rounded-sm inline-block bg-emerald-900/60" />
+                현금 잔여 {(usdCash / usdDenom * 100).toFixed(1)}%
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <p className="text-[10px] text-gray-700">매수가 기준 · USD/KRW {fxRate.toLocaleString('ko-KR')}</p>
+    </div>
+  )
+}
+
 // ── AddAssetForm ───────────────────────────────────────────
 
 const MARKET_TYPES: MarketType[] = ['K-Stock', 'U-Stock', 'Crypto', 'Cash']
@@ -842,6 +1099,7 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
 }) {
   const [expanded, setExpanded]     = useState(false)
   const [mode, setMode]             = useState<InlineMode>('none')
+  const detailRef                   = useRef<HTMLDivElement>(null)
 
   const cfg      = MARKET_CONFIG[asset.market]
   const currency = cfg.currency
@@ -850,6 +1108,22 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
   const hCost    = holdingCost(asset)
   const realPL   = totalRealizedPL(asset)
   const hasSells = asset.sells.length > 0
+
+  // 패널이 열릴 때 자동 스크롤
+  useEffect(() => {
+    if (expanded && detailRef.current) {
+      setTimeout(() => {
+        detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }, 50)
+    }
+  }, [expanded])
+
+  const toggleExpand = () => {
+    setExpanded(prev => {
+      if (prev) setMode('none')
+      return !prev
+    })
+  }
 
   const handleDeleteEntry = (entryId: string) => {
     const remaining = asset.entries.filter(e => e.id !== entryId)
@@ -869,8 +1143,13 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
 
   return (
     <div className="card !p-0 overflow-hidden">
-      {/* ── 요약 행 ── */}
-      <div className="flex items-center gap-3 px-4 py-3.5">
+      {/* ── 요약 행 (전체 클릭 가능) ── */}
+      <div
+        className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-gray-800/40 transition-colors duration-150 select-none"
+        onClick={toggleExpand}
+        role="button"
+        aria-expanded={expanded}
+      >
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${cfg.iconBgCls}`}>
           <span className="text-xl leading-none">{cfg.emoji}</span>
         </div>
@@ -890,7 +1169,6 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
             <span className="text-xs text-gray-300 mono font-medium">{fmtQty(hQty, asset.market)}</span>
             <span className="text-xs text-gray-600">×</span>
             <span className="text-xs text-gray-500 mono">평단 {fmtMoney(avg, currency)}</span>
-            {/* 실현손익 뱃지 */}
             {hasSells && (
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md mono ${realPL >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>
                 실현 {realPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(realPL), currency)}
@@ -904,13 +1182,22 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
             <p className="text-sm font-semibold text-gray-200 mono">{fmtMoney(hCost, currency)}</p>
             <p className="text-[10px] text-gray-600">보유금액</p>
           </div>
-          <button onClick={() => { setExpanded(e => !e); if (expanded) setMode('none') }}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition-all"
-            title={expanded ? '접기' : '이력 보기'}>
-            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-          </button>
-          <button onClick={() => { if (!window.confirm(`'${asset.name}' 종목을 삭제할까요?`)) return; onDeleteAsset(asset.id) }}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all" title="종목 삭제">
+          {/* 화살표 — 클릭 이벤트는 부모 div가 처리 */}
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500">
+            <ChevronDown
+              className={`w-4 h-4 transition-transform duration-300 ease-in-out ${expanded ? 'rotate-180' : 'rotate-0'}`}
+            />
+          </div>
+          {/* 삭제 버튼 — 클릭 이벤트 전파 차단 */}
+          <button
+            onClick={e => {
+              e.stopPropagation()
+              if (!window.confirm(`'${asset.name}' 종목을 삭제할까요?`)) return
+              onDeleteAsset(asset.id)
+            }}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+            title="종목 삭제"
+          >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -924,7 +1211,7 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
 
       {/* ── 펼침 영역 ── */}
       {expanded && (
-        <div className="border-t border-gray-800 px-4 pb-4 pt-3 space-y-4">
+        <div ref={detailRef} className="border-t border-gray-800 px-4 pb-4 pt-3 space-y-4">
 
           {/* ▸ 매수 이력 */}
           <div className="space-y-1">
@@ -1073,9 +1360,11 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
 
 // ── Main: Portfolio ────────────────────────────────────────
 
-export default function Portfolio({ onTransaction, userId }: {
+export default function Portfolio({ onTransaction, userId, seed, onSeedChange }: {
   onTransaction?: (tx: Omit<Transaction, 'id' | 'date'>) => void
   userId?: string | null
+  seed?: SeedData
+  onSeedChange?: (v: SeedData) => void
 }) {
   // localStorage에서 즉시 초기화 — 마운트 시 빈 배열로 덮어쓰는 버그 방지
   const [assets, setAssets]           = useState<Asset[]>(() => loadAssets())
@@ -1305,7 +1594,10 @@ export default function Portfolio({ onTransaction, userId }: {
         </div>
       ) : (
         <>
-          <RiskIndexCard assets={assets} />
+          {onSeedChange && (
+            <SeedInput seed={seed ?? { krw: 0, usd: 0 }} onChange={onSeedChange} />
+          )}
+          <AllocationBar assets={assets} seed={seed ?? { krw: 0, usd: 0 }} />
 
           {hasPL && (
             <div className={`rounded-2xl border px-5 py-3.5 flex items-center justify-between ${grandPL >= 0 ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-rose-500/8 border-rose-500/20'}`}>

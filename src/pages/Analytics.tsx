@@ -1,12 +1,12 @@
 /**
  * Analytics — 분석 패널
- * 포트폴리오 심층 분석: 자산 배분, 실현손익, 실시간 평가손익, 섹터 분석
+ * 자산 배분, 실현손익, 실시간 평가손익, 섹터 분석, 역사적 MDD 시뮬레이션
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  PieChart, Pie, Cell, Tooltip, BarChart, Bar,
-  XAxis, YAxis, ResponsiveContainer,
+  PieChart, Pie, Cell, Tooltip,
+  ResponsiveContainer, Sector,
 } from 'recharts'
 import { BarChart2, RefreshCw, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
 import type { Asset, MarketType } from './Portfolio'
@@ -42,8 +42,6 @@ function loadLocalAssets(): Asset[] {
 }
 
 // ── Ticker resolution ──────────────────────────────────────
-// asset.id가 티커 형식이면 반환 (검색으로 등록한 자산)
-// timestamp ID 형식(`1234567890-abc4`)은 제외
 
 const TICKER_RE = /^[A-Z0-9.\-:]{2,20}$/
 
@@ -83,10 +81,7 @@ function holdingCost(asset: Asset): number {
 
 function totalRealizedPL(asset: Asset): number {
   const avg = avgBuyPrice(asset)
-  return asset.sells.reduce((s, e) => {
-    const pl = e.quantity * e.price - e.quantity * avg
-    return s + pl
-  }, 0)
+  return asset.sells.reduce((s, e) => s + e.quantity * e.price - e.quantity * avg, 0)
 }
 
 // ── Market config ──────────────────────────────────────────
@@ -99,17 +94,17 @@ const MARKET: Record<MarketType, { label: string; color: string; currency: 'KRW'
 }
 
 const SECTOR_COLORS: Record<string, string> = {
-  'Technology':           '#6366F1',
-  'Healthcare':           '#10B981',
-  'Financial Services':   '#F59E0B',
-  'Consumer Cyclical':    '#EF4444',
-  'Industrials':          '#3B82F6',
+  'Technology':            '#6366F1',
+  'Healthcare':            '#10B981',
+  'Financial Services':    '#F59E0B',
+  'Consumer Cyclical':     '#EF4444',
+  'Industrials':           '#3B82F6',
   'Communication Services':'#8B5CF6',
-  'Consumer Defensive':   '#14B8A6',
-  'Energy':               '#F97316',
-  'Basic Materials':      '#84CC16',
-  'Real Estate':          '#EC4899',
-  'Utilities':            '#6B7280',
+  'Consumer Defensive':    '#14B8A6',
+  'Energy':                '#F97316',
+  'Basic Materials':       '#84CC16',
+  'Real Estate':           '#EC4899',
+  'Utilities':             '#6B7280',
 }
 
 // ── Formatters ─────────────────────────────────────────────
@@ -125,8 +120,11 @@ function fmtPct(n: number): string {
 }
 
 function fmtMan(v: number): string {
-  const man = Math.round(v / 10000)
-  return `₩${man.toLocaleString('ko-KR')}만`
+  const abs = Math.abs(v)
+  const sign = v < 0 ? '-' : ''
+  if (abs >= 100_000_000) return `${sign}₩${(abs / 100_000_000).toFixed(1)}억`
+  if (abs >= 10_000)      return `${sign}₩${Math.round(abs / 10_000).toLocaleString('ko-KR')}만`
+  return `${sign}₩${Math.round(abs).toLocaleString('ko-KR')}`
 }
 
 // ── Sub-components ─────────────────────────────────────────
@@ -180,9 +178,104 @@ function CustomTooltip({ active, payload, label }: {
   )
 }
 
+// ── MDD 역사적 위기 시뮬레이션 ────────────────────────────
+
+const MDD_SCENARIOS = [
+  {
+    name: '2008 금융위기',    sub: 'Global Financial Crisis', year: '2008–09',
+    emoji: '🏦', barColor: 'bg-rose-500',
+    drawdowns: { 'K-Stock': 54, 'U-Stock': 56, 'Crypto': 0,  'Cash': 0 } as Record<string, number>,
+    color: 'text-rose-500',   bg: 'bg-rose-600/10 border-rose-600/25',
+  },
+  {
+    name: '2020 코로나 충격', sub: 'COVID-19 Crash',          year: '2020.02–03',
+    emoji: '🦠', barColor: 'bg-orange-400',
+    drawdowns: { 'K-Stock': 36, 'U-Stock': 34, 'Crypto': 50, 'Cash': 0 } as Record<string, number>,
+    color: 'text-orange-400', bg: 'bg-orange-500/8 border-orange-500/20',
+  },
+  {
+    name: '2022 긴축 쇼크',   sub: 'Fed Rate Hike Crisis',    year: '2022.01–12',
+    emoji: '📈', barColor: 'bg-amber-400',
+    drawdowns: { 'K-Stock': 26, 'U-Stock': 19, 'Crypto': 75, 'Cash': 0 } as Record<string, number>,
+    color: 'text-amber-400',  bg: 'bg-amber-500/8 border-amber-500/20',
+  },
+  {
+    name: '닷컴버블 붕괴',    sub: 'Dot-com Bubble',          year: '2000–02',
+    emoji: '💻', barColor: 'bg-violet-400',
+    drawdowns: { 'K-Stock': 55, 'U-Stock': 49, 'Crypto': 0,  'Cash': 0 } as Record<string, number>,
+    color: 'text-violet-400', bg: 'bg-violet-500/8 border-violet-500/20',
+  },
+] as const
+
+function MddSection({ assets, krwRate }: { assets: Asset[]; krwRate: number }) {
+  const portfolioKRW = assets.reduce((s, a) => {
+    const cost = holdingCost(a)
+    return s + (MARKET[a.market].currency === 'KRW' ? cost : cost * krwRate)
+  }, 0)
+  if (portfolioKRW <= 0) return null
+
+  return (
+    <div className="card space-y-4">
+      <div className="flex items-center gap-2">
+        <TrendingDown className="w-4 h-4 text-rose-400" />
+        <p className="text-sm font-semibold text-gray-200">역사적 위기 시뮬레이션 (MDD)</p>
+        <span className="text-[10px] text-gray-600 font-normal ml-1">내 비중 적용</span>
+      </div>
+      <p className="text-xs text-gray-500 leading-relaxed">
+        현재 포트폴리오 배분에 역사적 최대 낙폭(MDD)을 적용한 예상 손실입니다. 시장별 MDD 가중 평균으로 계산됩니다.
+      </p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {MDD_SCENARIOS.map((s, i) => {
+          let lossKRW = 0
+          for (const a of assets) {
+            const cost   = holdingCost(a)
+            const krwVal = MARKET[a.market].currency === 'KRW' ? cost : cost * krwRate
+            lossKRW     += krwVal * ((s.drawdowns[a.market] ?? 0) / 100)
+          }
+          const afterKRW = portfolioKRW - lossKRW
+          const lossPct  = portfolioKRW > 0 ? (lossKRW / portfolioKRW) * 100 : 0
+          return (
+            <div key={i} className={`rounded-xl border px-4 py-3.5 ${s.bg}`}>
+              <div className="flex items-start justify-between gap-2 mb-2.5">
+                <div>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-base">{s.emoji}</span>
+                    <span className={`text-xs font-bold ${s.color}`}>{s.name}</span>
+                  </div>
+                  <span className="text-[10px] text-gray-600">{s.sub} · {s.year}</span>
+                </div>
+                <div className={`text-xl font-bold mono flex-shrink-0 ${s.color}`}>
+                  -{lossPct.toFixed(1)}%
+                </div>
+              </div>
+              <div className="h-1.5 bg-black/20 rounded-full overflow-hidden mb-2">
+                <div className={`h-full rounded-full ${s.barColor} transition-all duration-700`}
+                  style={{ width: `${Math.min(100, lossPct)}%` }} />
+              </div>
+              <div className="flex justify-between text-[10px]">
+                <div>
+                  <p className="text-gray-600 mb-0.5">예상 손실</p>
+                  <p className={`font-bold mono ${s.color}`}>-{fmtMan(lossKRW)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-gray-600 mb-0.5">잔여 자산</p>
+                  <p className="text-gray-300 mono font-semibold">{fmtMan(afterKRW)}</p>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-[10px] text-gray-700">과거 데이터 기준 최대 낙폭 추정치 · 미래 성과 보장 아님 · 투자 권유 아님</p>
+    </div>
+  )
+}
+
 // ── SectorSection ──────────────────────────────────────────
 
 function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamentals> }) {
+  const [activeIdx, setActiveIdx] = useState<number | undefined>(undefined)
+
   const sectorMap = new Map<string, number>()
   for (const [, f] of fundamentals) {
     if (!f.sector) continue
@@ -203,6 +296,15 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
     fontSize: '12px',
   }
 
+  function renderActiveShape(props: any) {
+    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
+    return (
+      <Sector cx={cx} cy={cy}
+        innerRadius={innerRadius} outerRadius={outerRadius + 6}
+        startAngle={startAngle} endAngle={endAngle} fill={fill} />
+    )
+  }
+
   return (
     <div className="card">
       <p className="text-sm font-semibold text-gray-200 mb-4">섹터 분포</p>
@@ -210,7 +312,11 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={data} cx="50%" cy="50%" outerRadius={70} innerRadius={40}
-              paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}>
+              paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}
+              animationBegin={0} animationDuration={1500} animationEasing="ease-out"
+              activeIndex={activeIdx} activeShape={renderActiveShape}
+              onMouseEnter={(_, i) => setActiveIdx(i)}
+              onMouseLeave={() => setActiveIdx(undefined)}>
               {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
             </Pie>
             <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}개 종목`, '']} />
@@ -303,13 +409,15 @@ export default function Analytics({ userId }: { userId: string | null }) {
   const [loading,   setLoading]   = useState(true)
   const [krwRate,   setKrwRate]   = useState(1350)
 
-  // 실시간 시세
   const [livePrices,  setLivePrices]  = useState<Map<string, PriceResult>>(new Map())
   const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set())
 
-  // 기본 지표
   const [fundamentals, setFundamentals] = useState<Map<string, Fundamentals>>(new Map())
   const [fundLoading,  setFundLoading]  = useState(false)
+
+  // pie hover state
+  const [pieActiveIdx, setPieActiveIdx] = useState<number | undefined>(undefined)
+  const [barActiveIdx, setBarActiveIdx] = useState<number | undefined>(undefined)
 
   const hasAutoFetched = useRef(false)
 
@@ -331,7 +439,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
       .catch(() => {})
   }, [userId])
 
-  // ── 시세 자동 페치 (마운트 1회) ──────────────────────────
+  // ── 시세 자동 페치 ────────────────────────────────────────
   const fetchLivePrice = useCallback(async (ticker: string) => {
     setFetchingIds(prev => new Set(prev).add(ticker))
     try {
@@ -355,8 +463,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
   useEffect(() => {
     if (loading || assets.length === 0 || hasAutoFetched.current) return
     hasAutoFetched.current = true
-    const tickerAssets = assets.filter(a => resolveTickerForAsset(a))
-    tickerAssets.forEach(a => fetchLivePrice(resolveTickerForAsset(a)!))
+    assets.filter(a => resolveTickerForAsset(a)).forEach(a => fetchLivePrice(resolveTickerForAsset(a)!))
   }, [loading, assets, fetchLivePrice])
 
   // ── 기본 지표 로드 ────────────────────────────────────────
@@ -381,8 +488,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
   const handleRefreshAll = useCallback(() => {
     hasAutoFetched.current = false
     setLivePrices(new Map())
-    const tickerAssets = assets.filter(a => resolveTickerForAsset(a))
-    tickerAssets.forEach(a => fetchLivePrice(resolveTickerForAsset(a)!))
+    assets.filter(a => resolveTickerForAsset(a)).forEach(a => fetchLivePrice(resolveTickerForAsset(a)!))
   }, [assets, fetchLivePrice])
 
   // ── Derived data ───────────────────────────────────────────
@@ -397,10 +503,10 @@ export default function Analytics({ userId }: { userId: string | null }) {
   const byMarket = (['K-Stock', 'U-Stock', 'Crypto', 'Cash'] as MarketType[]).map(m => {
     const group = assets.filter(a => a.market === m)
     return {
-      market:  m,
-      krw:     group.reduce((s, a) => s + toKrw(a), 0),
-      pl:      group.reduce((s, a) => s + totalRealizedPL(a), 0),
-      count:   group.length,
+      market: m,
+      krw:    group.reduce((s, a) => s + toKrw(a), 0),
+      pl:     group.reduce((s, a) => s + totalRealizedPL(a), 0),
+      count:  group.length,
     }
   }).filter(g => g.krw > 0)
 
@@ -419,20 +525,21 @@ export default function Analytics({ userId }: { userId: string | null }) {
   const plDetails = assets
     .filter(a => a.sells.length > 0)
     .map(a => ({
-      id:       a.id,
-      name:     a.name,
-      market:   a.market,
-      pl:       totalRealizedPL(a),
-      plPct:    totalInvested(a) > 0 ? (totalRealizedPL(a) / totalInvested(a)) * 100 : 0,
+      id: a.id, name: a.name, market: a.market,
+      pl: totalRealizedPL(a),
+      plPct: totalInvested(a) > 0 ? (totalRealizedPL(a) / totalInvested(a)) * 100 : 0,
       currency: MARKET[a.market].currency,
     }))
     .sort((a, b) => b.pl - a.pl)
 
-  // 실시간 평가손익 데이터
-  type LiveAsset = { id: string; name: string; market: MarketType; ticker: string; currency: 'KRW' | 'USD'; currentVal: number; costVal: number; pl: number; plPct: number; price: number; change: number }
+  type LiveAsset = {
+    id: string; name: string; market: MarketType; ticker: string
+    currency: 'KRW' | 'USD'; currentVal: number; costVal: number
+    pl: number; plPct: number; price: number; change: number
+  }
   const liveAssets = assets
     .map((a): LiveAsset | null => {
-      const ticker = resolveTickerForAsset(a)
+      const ticker    = resolveTickerForAsset(a)
       if (!ticker) return null
       const priceData = livePrices.get(ticker)
       const currency  = MARKET[a.market].currency
@@ -448,7 +555,17 @@ export default function Analytics({ userId }: { userId: string | null }) {
     .filter((x): x is LiveAsset => x !== null)
 
   const hasTickerAssets = assets.some(a => resolveTickerForAsset(a))
-  const isFetching = fetchingIds.size > 0
+  const isFetching      = fetchingIds.size > 0
+
+  // ── Active Pie Shape ───────────────────────────────────────
+  function renderActivePieShape(props: any) {
+    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
+    return (
+      <Sector cx={cx} cy={cy}
+        innerRadius={innerRadius} outerRadius={outerRadius + 8}
+        startAngle={startAngle} endAngle={endAngle} fill={fill} />
+    )
+  }
 
   // ── 로딩 스켈레톤 ──────────────────────────────────────────
   if (loading) {
@@ -462,6 +579,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
           <Skel h="h-72" />
           <Skel h="h-72" />
         </div>
+        <Skel h="h-56" />
         <Skel h="h-48" />
       </div>
     )
@@ -502,7 +620,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
         <p className="text-sm text-gray-500 mt-0.5">{assets.length}개 종목 · 포트폴리오 심층 분석</p>
       </div>
 
-      {/* 요약 통계 4개 카드 */}
+      {/* 요약 통계 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="총 보유금액" value={fmtMan(totalKrw)} sub="KRW 환산" />
         <StatCard
@@ -523,16 +641,21 @@ export default function Analytics({ userId }: { userId: string | null }) {
         />
       </div>
 
-      {/* 차트 2개 */}
+      {/* 자산 배분 차트 */}
       <div className="grid md:grid-cols-2 gap-4">
-        {/* 자산 배분 파이 차트 */}
+        {/* 파이 차트 — 애니메이션 + 호버 확장 */}
         <div className="card">
           <p className="text-sm font-semibold text-gray-200 mb-4">자산 배분</p>
           <div style={{ width: '100%', height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} innerRadius={50}
-                  paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}>
+                <Pie
+                  data={pieData} cx="50%" cy="50%" outerRadius={80} innerRadius={50}
+                  paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}
+                  animationBegin={0} animationDuration={1500} animationEasing="ease-out"
+                  activeIndex={pieActiveIdx} activeShape={renderActivePieShape}
+                  onMouseEnter={(_, index) => setPieActiveIdx(index)}
+                  onMouseLeave={() => setPieActiveIdx(undefined)}>
                   {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                 </Pie>
                 <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
@@ -543,7 +666,9 @@ export default function Analytics({ userId }: { userId: string | null }) {
             {pieData.map((entry, i) => {
               const pct = totalKrw > 0 ? (entry.value / totalKrw * 100).toFixed(1) : '0'
               return (
-                <div key={i} className="flex items-center gap-1.5">
+                <div key={i} className={`flex items-center gap-1.5 cursor-default transition-opacity ${pieActiveIdx !== undefined && pieActiveIdx !== i ? 'opacity-40' : 'opacity-100'}`}
+                  onMouseEnter={() => setPieActiveIdx(i)}
+                  onMouseLeave={() => setPieActiveIdx(undefined)}>
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
                   <span className="text-xs text-gray-400">{entry.name}</span>
                   <span className="text-xs text-gray-600 mono">{pct}%</span>
@@ -553,23 +678,44 @@ export default function Analytics({ userId }: { userId: string | null }) {
           </div>
         </div>
 
-        {/* 시장별 분포 바 차트 */}
+        {/* 시장별 분포 파이 차트 */}
         <div className="card">
           <p className="text-sm font-semibold text-gray-200 mb-4">시장별 분포</p>
           <div style={{ width: '100%', height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis hide />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(108,99,255,0.05)' }} />
-                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                  {barData.map((entry, index) => <Cell key={`bar-${index}`} fill={entry.fill} />)}
-                </Bar>
-              </BarChart>
+              <PieChart>
+                <Pie
+                  data={pieData} cx="50%" cy="50%" outerRadius={80} innerRadius={50}
+                  paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}
+                  animationBegin={0} animationDuration={1500} animationEasing="ease-out"
+                  activeIndex={barActiveIdx} activeShape={renderActivePieShape}
+                  onMouseEnter={(_, index) => setBarActiveIdx(index)}
+                  onMouseLeave={() => setBarActiveIdx(undefined)}>
+                  {pieData.map((entry, index) => <Cell key={`bar-cell-${index}`} fill={entry.color} />)}
+                </Pie>
+                <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
+              </PieChart>
             </ResponsiveContainer>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+            {pieData.map((entry, i) => {
+              const pct = totalKrw > 0 ? (entry.value / totalKrw * 100).toFixed(1) : '0'
+              return (
+                <div key={i} className={`flex items-center gap-1.5 cursor-default transition-opacity ${barActiveIdx !== undefined && barActiveIdx !== i ? 'opacity-40' : 'opacity-100'}`}
+                  onMouseEnter={() => setBarActiveIdx(i)}
+                  onMouseLeave={() => setBarActiveIdx(undefined)}>
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+                  <span className="text-xs text-gray-400">{entry.name}</span>
+                  <span className="text-xs text-gray-600 mono">{pct}%</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
+
+      {/* 역사적 위기 시뮬레이션 (MDD) — 자산 배분 바로 아래 */}
+      <MddSection assets={assets} krwRate={krwRate} />
 
       {/* 실시간 평가손익 */}
       {hasTickerAssets && (
@@ -579,14 +725,12 @@ export default function Analytics({ userId }: { userId: string | null }) {
             <button
               onClick={handleRefreshAll}
               disabled={isFetching}
-              className="flex items-center gap-1.5 text-[10px] text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-40"
-            >
+              className="flex items-center gap-1.5 text-[10px] text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-40">
               <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
               {isFetching ? '조회 중…' : '전체 새로고침'}
             </button>
           </div>
 
-          {/* 티커 없는 자산 안내 */}
           {assets.some(a => !resolveTickerForAsset(a)) && (
             <div className="flex items-start gap-2 text-[10px] text-gray-600 bg-gray-800/50 rounded-lg px-3 py-2">
               <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
@@ -622,7 +766,6 @@ export default function Analytics({ userId }: { userId: string | null }) {
                   </div>
                 </div>
               ))}
-              {/* 합계 */}
               {liveAssets.length > 1 && (() => {
                 const totalLivePL = liveAssets.reduce((s, a) => {
                   const inKrw = MARKET[a.market].currency === 'KRW' ? a.pl : a.pl * krwRate
@@ -705,7 +848,6 @@ export default function Analytics({ userId }: { userId: string | null }) {
         </div>
       )}
 
-      {/* 하단 안내 */}
       <p className="text-[11px] text-gray-700 text-center pb-4">
         Finnhub · FMP · Upbit 데이터 기준 · 투자 권유 아님
       </p>

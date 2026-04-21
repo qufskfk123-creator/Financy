@@ -1,23 +1,17 @@
 /**
  * TickerTape — 상단 고정 무한 스크롤 전광판
  *
- * 데이터: S&P500, NASDAQ (Supabase 캐시) + BTC, ETH (Upbit 실시간)
- * 색상:  상승=빨강(#ef4444), 하락=파랑(#3b82f6) — 한국 주식 시장 관례
- * 애니메이션: framer-motion 무한 좌→우 스크롤
+ * 색상: 상승=red-500(#ef4444), 하락=blue-500(#3b82f6), 환율=yellow-500(#eab308)
+ * 애니메이션: 순수 CSS @keyframes + will-change:transform (GPU 가속)
+ * 루프: 콘텐츠 2× 복제 후 -50% 이동 → 끊김 없는 무한 루프
+ * 연속성: duration을 최초 1회만 계산하여 리로딩 시 애니메이션 리셋 방지
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
-interface TickerItem {
-  symbol:    string
-  name:      string
-  price:     number
-  change:    number
-  changePct: number
-  currency:  'KRW' | 'USD'
-}
+type FeedItem =
+  | { kind: 'ticker'; symbol: string; name: string; price: number; change: number; changePct: number; currency: 'KRW' | 'USD' }
+  | { kind: 'sep';    label: string }
 
 // ── 가격 포맷터 ───────────────────────────────────────────────────
 
@@ -30,42 +24,77 @@ function fmtPrice(price: number, currency: 'KRW' | 'USD'): string {
   return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-// ── 개별 칩 ──────────────────────────────────────────────────────
+// ── 섹션 구분 칩 ──────────────────────────────────────────────────
 
-function Chip({ item }: { item: TickerItem }) {
-  const up = item.changePct > 0
-  const dn = item.changePct < 0
-  const Icon = up ? TrendingUp : dn ? TrendingDown : Minus
-  // 상승=빨강, 하락=파랑 (한국 관례)
-  const colorCls = up ? 'text-[#ef4444]' : dn ? 'text-[#60a5fa]' : 'text-gray-500'
-
+function SepChip({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 px-3 shrink-0 select-none">
-      <span className="text-[11px] font-bold text-gray-200 tracking-wide">{item.symbol}</span>
-      <span className="text-[11px] text-gray-400 font-mono">{fmtPrice(item.price, item.currency)}</span>
-      <span className={`inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold ${colorCls}`}>
-        <Icon className="w-2.5 h-2.5" />
-        {up ? '+' : ''}{item.changePct.toFixed(2)}%
+    <span className="inline-flex items-center mx-4 shrink-0 select-none">
+      <span
+        className="text-[11px] font-semibold tracking-widest px-2 py-0.5 rounded-full"
+        style={{
+          background: 'rgba(108,99,255,0.18)',
+          border: '1px solid rgba(108,99,255,0.35)',
+          color: '#a99dff',
+          letterSpacing: '0.08em',
+        }}
+      >
+        {label}
       </span>
-      <span className="text-gray-700 text-[10px] ml-1">│</span>
     </span>
   )
 }
 
+// ── 시세 칩 ───────────────────────────────────────────────────────
+
+function TickerChip({ item }: { item: Extract<FeedItem, { kind: 'ticker' }> }) {
+  const up   = item.changePct > 0
+  const dn   = item.changePct < 0
+  const isFX = item.symbol.includes('/')
+
+  // 한국 관례: 상승=빨강, 하락=파랑 / 환율=노랑
+  const color = isFX
+    ? '#eab308'
+    : up ? '#ef4444' : dn ? '#3b82f6' : '#6b7280'
+  const arrow = up ? '▲' : dn ? '▼' : '─'
+  const sign  = up ? '+' : ''
+
+  return (
+    <span className="inline-flex items-center gap-2 mx-8 shrink-0 select-none">
+      <span className="text-[13px] font-bold text-gray-100 tracking-wide">{item.symbol}</span>
+      <span className="text-[13px] text-gray-400 font-mono">{fmtPrice(item.price, item.currency)}</span>
+      <span className="text-[12px] font-mono font-semibold" style={{ color }}>
+        {arrow} {sign}{item.changePct.toFixed(2)}%
+      </span>
+      <span className="text-gray-700 text-xs">|</span>
+    </span>
+  )
+}
+
+// 복제 벌 수: 4벌로 복제 후 -25% 이동 = 1벌 너비만큼 이동
+// 뷰포트 너비가 1벌 너비에 근접해도 이음부가 화면에 잡히지 않음
+const COPIES = 4
+const SHIFT  = `${(100 / COPIES).toFixed(4)}%`
+
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────
 
 export default function TickerTape() {
-  const [items, setItems] = useState<TickerItem[]>([])
-  const measureRef = useRef<HTMLDivElement>(null)
-  const [singleWidth, setSingleWidth] = useState(0)
+  const [items, setItems]   = useState<FeedItem[]>([])
+  const [paused, setPaused] = useState(false)
+  // duration을 최초 1회만 고정 → 리로딩 시 animation 속성 불변 → 애니메이션 연속 유지
+  const durationRef         = useRef<number | null>(null)
 
-  // 데이터 폴링 (60초 주기)
   useEffect(() => {
     const load = () =>
       fetch('/api/ticker-tape')
         .then(r => r.json())
-        .then((d: { items?: TickerItem[] }) => {
-          if (d.items && d.items.length > 0) setItems(d.items)
+        .then((d: { items?: FeedItem[] }) => {
+          if (d.items && d.items.length > 0) {
+            if (durationRef.current === null) {
+              const count = d.items.filter(i => i.kind === 'ticker').length
+              durationRef.current = Math.max(25, count * 3.5)
+            }
+            setItems(d.items)
+          }
         })
         .catch(() => {})
 
@@ -74,52 +103,58 @@ export default function TickerTape() {
     return () => clearInterval(id)
   }, [])
 
-  // 아이템 변경 시 단일 세트 너비 측정
-  useLayoutEffect(() => {
-    if (!measureRef.current || items.length === 0) return
-    setSingleWidth(measureRef.current.offsetWidth)
-  }, [items])
-
   if (items.length === 0) return null
 
-  const duration = Math.max(12, items.length * 4) // 항목당 4초
+  const duration = durationRef.current ?? 35
+  const track    = Array.from({ length: COPIES }, () => items).flat()
 
   return (
-    <div
-      className="w-full h-8 bg-gray-950/95 border-b border-gray-800/60 overflow-hidden flex items-center relative z-40 shrink-0"
-      aria-label="시장 전광판"
-    >
-      {/* 좌우 페이드 마스크 */}
-      <div className="absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-gray-950 to-transparent z-10 pointer-events-none" />
-      <div className="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-gray-950 to-transparent z-10 pointer-events-none" />
+    <>
+      <style>{`
+        @keyframes financy-ticker {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-${SHIFT}); }
+        }
+      `}</style>
 
-      {/* 숨김 측정용 — 레이아웃에 영향 없음 */}
-      <div className="absolute opacity-0 pointer-events-none flex" aria-hidden="true">
-        <div ref={measureRef} className="inline-flex">
-          {items.map((item, i) => <Chip key={i} item={item} />)}
-        </div>
-      </div>
+      <div
+        className="w-full h-10 overflow-hidden flex items-center relative shrink-0"
+        style={{
+          background: 'rgba(3,7,18,0.92)',
+          backdropFilter: 'blur(8px)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          zIndex: 40,
+        }}
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        aria-label="시장 전광판"
+      >
+        {/* 좌우 페이드 마스크 */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-12 pointer-events-none z-10"
+          style={{ background: 'linear-gradient(to right, rgba(3,7,18,0.92), transparent)' }}
+        />
+        <div
+          className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none z-10"
+          style={{ background: 'linear-gradient(to left, rgba(3,7,18,0.92), transparent)' }}
+        />
 
-      {/* 애니메이션 트랙 — singleWidth 측정 후 시작 */}
-      {singleWidth > 0 && (
-        <motion.div
-          key={singleWidth}           // 너비 변경 시 애니메이션 재시작
-          className="inline-flex"
-          initial={{ x: 0 }}
-          animate={{ x: -singleWidth }}
-          transition={{
-            duration,
-            ease: 'linear',
-            repeat: Infinity,
-            repeatType: 'loop',
+        {/* 스크롤 트랙: COPIES벌 복제 후 -(1/COPIES)% 이동 = 1벌 너비만큼 이동 */}
+        <div
+          className="inline-flex items-center"
+          style={{
+            willChange: 'transform',
+            animation: `financy-ticker ${duration}s linear infinite`,
+            animationPlayState: paused ? 'paused' : 'running',
           }}
         >
-          {/* 두 세트 반복 — x=-singleWidth 도달 시 두 번째 세트가 첫 번째 위치와 동일 */}
-          {[...items, ...items].map((item, i) => (
-            <Chip key={i} item={item} />
-          ))}
-        </motion.div>
-      )}
-    </div>
+          {track.map((item, i) =>
+            item.kind === 'sep'
+              ? <SepChip key={i} label={item.label} />
+              : <TickerChip key={i} item={item} />
+          )}
+        </div>
+      </div>
+    </>
   )
 }

@@ -1,0 +1,348 @@
+# Financy — Claude 인계 문서
+
+> 새 채팅에서 이 파일을 읽으면 프로젝트 전체 맥락을 즉시 파악할 수 있습니다.
+
+---
+
+## 프로젝트 개요
+
+**Financy** — 한국 개인 투자자를 위한 투자 기상도 & 포트폴리오 관리 앱  
+스택: React 19 + TypeScript + Vite + Tailwind CSS + Supabase + Vercel  
+배포: Vercel (서버리스 함수) + Supabase (PostgreSQL + RLS)
+
+---
+
+## 디렉토리 구조
+
+```
+D:\AI study\Financy\
+├── src/
+│   ├── App.tsx                  # 루트: 라우팅, 전역 상태, 인증
+│   ├── main.tsx
+│   ├── index.css                # 글로벌 CSS (Tailwind + CSS 변수)
+│   ├── pages/
+│   │   ├── Dashboard.tsx        # 기상도 (Fear&Greed, 환율, 자금흐름, 뉴스)
+│   │   ├── Portfolio.tsx        # 포트폴리오 관리 (CRUD, 손익)
+│   │   ├── RiskCenter.tsx       # 리스크 센터 (방어지표, FX 노출, 집중도)
+│   │   ├── Analytics.tsx        # 분석 (파이차트, MDD, 섹터, 배당, 목표가)
+│   │   ├── Settings.tsx         # 설정 (테마, 닉네임, 이모지, 채팅 설정)
+│   │   └── Auth.tsx             # 인증 페이지
+│   ├── components/
+│   │   ├── Sidebar.tsx          # 사이드바 + 모바일 하단 탭바 (EmojiAvatar 사용)
+│   │   ├── TickerTape.tsx       # 상단 실시간 시세 전광판 (CSS GPU 애니메이션)
+│   │   ├── FloatingChat.tsx     # 드래그 가능한 플로팅 채팅창 (framer-motion)
+│   │   ├── EmojiAvatar.tsx      # 이모지 아바타 컴포넌트 + 유틸
+│   │   ├── AuthModal.tsx        # 인증 모달 (레거시)
+│   │   ├── Toast.tsx            # 알림 토스트
+│   │   └── ErrorBoundary.tsx    # React 에러 경계
+│   └── lib/
+│       ├── supabase.ts          # Supabase 클라이언트 싱글톤
+│       ├── db.ts                # Asset CRUD (localStorage ↔ Supabase)
+│       ├── transactions.ts      # 거래 내역 localStorage 헬퍼
+│       ├── seed.ts              # 투자 시드(KRW/USD) localStorage 헬퍼
+│       ├── chatSettings.ts      # 채팅 설정 (localStorage + Supabase profiles)
+│       ├── priceCache.ts        # Supabase ticker_cache (15분 TTL)
+│       ├── price-cache.ts       # localStorage 가격 캐시 (1h fresh / 24h valid)
+│       ├── fundamentalsCache.ts # PER/배당/베타 일일 캐시
+│       └── useShare.ts          # 공유 hook
+├── api/                         # Vercel 서버리스 함수
+│   ├── quote.ts                 # 주가/코인 시세
+│   ├── search.ts                # 종목 검색
+│   ├── fundamentals.ts          # 재무 지표
+│   ├── exchange-rates.ts        # 환율 (Frankfurter)
+│   ├── fear-greed.ts            # Fear & Greed Index
+│   ├── liquidity.ts             # 자금 흐름 (QQQ vs UUP)
+│   ├── market-status.ts         # 시장 온도
+│   ├── market-news.ts           # 뉴스 RSS
+│   ├── ticker-tape.ts           # TickerTape 시세 (FeedItem 타입)
+│   └── lib/cache.ts             # Supabase market_cache 유틸
+├── vite.config.ts               # 개발 서버 API 미들웨어 포함
+├── tailwind.config.js           # brand.* 컬러 (보라 6C63FF), gray.850
+└── vercel.json
+```
+
+---
+
+## 핵심 타입
+
+```typescript
+// src/App.tsx
+type Page = 'dashboard' | 'portfolio' | 'risk-center' | 'analytics' | 'settings' | 'auth'
+type Theme = 'dark' | 'light'   // src/pages/Settings.tsx
+
+// src/pages/Portfolio.tsx
+type MarketType = 'K-Stock' | 'U-Stock' | 'Crypto' | 'Cash'
+interface Asset {
+  id: string; name: string; market: MarketType; createdAt: string
+  entries: Array<{ id: string; quantity: number; price: number; date: string }>
+  sells:   Array<{ id: string; quantity: number; price: number; date: string }>
+}
+
+// src/lib/transactions.ts
+type TxType = 'buy' | 'sell'
+interface Transaction {
+  id: string; date: string; type: TxType
+  name: string; market: MarketType; currency: 'KRW' | 'USD'
+  quantity: number; price: number; amount: number
+}
+
+// src/lib/seed.ts
+interface SeedData { krw: number; usd: number }
+
+// src/lib/chatSettings.ts
+interface ChatSettings { chatEnabled: boolean; badgeEnabled: boolean; opacity: number }
+// DEFAULT_SETTINGS = { chatEnabled: true, badgeEnabled: true, opacity: 0.45 }
+// localStorage: 'financy_chat_settings'
+// Supabase: profiles 테이블 JSONB settings 컬럼
+
+// api/ticker-tape.ts (FeedItem — 프론트에서 로컬 재선언으로 사용)
+type FeedItem =
+  | { kind: 'ticker'; symbol: string; name: string; price: number; change: number; changePct: number; currency: 'KRW' | 'USD' }
+  | { kind: 'sep';    label: string }
+```
+
+---
+
+## App.tsx 전역 상태 & 흐름
+
+```typescript
+// 주요 상태
+const [currentPage, setCurrentPage] = useState<Page>('dashboard')
+const [user, setUser]               = useState<User | null>(null)   // Supabase User
+const [guestName, setGuestName]     = useState<string | null>(...)  // localStorage
+const [theme, setTheme]             = useState<Theme>('dark')
+const [transactions, setTransactions] = useState<Transaction[]>(...)
+const [seed, setSeed]               = useState<SeedData>(...)        // { krw, usd }
+const [chatSettings, setChatSettings] = useState<ChatSettings>(...)
+const [userAvatar, setUserAvatar]   = useState<string | null>(...)  // localStorage 'financy_avatar_emoji'
+const [avatarColor]                 = useState<string>(...)          // localStorage 'financy_avatar_color'
+
+// debounce refs (채팅 설정 슬라이더 DB 요청 제한)
+const pendingSettingsRef = useRef<ChatSettings | null>(null)
+const debounceTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+const userIdRef          = useRef<string | undefined>(undefined)
+
+// userName 결정 우선순위
+const userName = user
+  ? user.user_metadata?.username ?? user.email?.split('@')[0] ?? null
+  : guestName   // 게스트는 localStorage('financy_guest_name')
+
+// 페이지 전환 — portfolio는 로그인 필수
+const handleNavigate = (page: Page) => {
+  if (page === 'portfolio' && !user) { setCurrentPage('auth'); return }
+  setCurrentPage(page)
+}
+
+// 채팅창은 chatSettings.chatEnabled 일 때만 렌더
+// {chatSettings.chatEnabled && <FloatingChat ... />}
+```
+
+---
+
+## EmojiAvatar 시스템
+
+```typescript
+// src/components/EmojiAvatar.tsx
+export const AVATAR_EMOJIS = [ /* 64개 이모지 — 투자/동물/자연/사물 4 카테고리 */ ]
+export const PASTEL_COLORS  = [ /* 20개 파스텔 색상 */ ]
+export const DEFAULT_EMOJI  = '🐣'
+export const EMPTY_EMOJI    = ''   // 이모지 없음 sentinel → 회색 사람 아이콘
+
+// 결정론적 타유저 아바타 (채팅에서 사용)
+export function avatarFromUserId(userId: string): { emoji: string; color: string }
+
+// 사용법
+// emoji === ''   → 회색 원 + 사람 SVG
+// emoji === null → DEFAULT_EMOJI ('🐣')
+// emoji === '🚀' → 해당 이모지 + color 배경
+
+// 저장: 로그인 → supabase.auth.updateUser({ data: { avatar_emoji: emoji } })
+//       게스트 → localStorage.setItem('financy_avatar_emoji', emoji)
+// 색상: localStorage('financy_avatar_color') — 첫 방문 시 randomPastel() 고정
+```
+
+---
+
+## FloatingChat 시스템
+
+```typescript
+// src/components/FloatingChat.tsx
+// props: user, userName, theme, userAvatar, avatarColor, chatSettings
+
+// 드래그: motion.button, drag={!isOpen}, dragMomentum=false, dragElastic=0.08
+// 스냅: onDragEnd → snapToEdge() → animate(dragX, target, spring{stiffness:380, damping:32})
+// 클릭 감지: onTap(framer-motion) + didDragRef 이중 가드 (드래그 후 오발 방지)
+// 열기: openChat() → dragX→0, dragY→0, snappedLeft=false, isOpen=true
+
+// Supabase Realtime
+// - Presence 채널: 접속자 수 (onlineCount)
+// - INSERT 구독: 읽지 않은 메시지 카운트 (unreadCount, isOpen=false일 때만 증가)
+
+// 관리자: user.email === 'qufskfk123@gmail.com'
+// → 메시지 hover 시 × 버튼 표시, deleteMessage(id) 호출
+
+// 채팅창 투명도: animate={{ opacity: isOpen ? 1 : chatSettings.opacity }}
+// 배지: AnimatePresence spring(stiffness:650, damping:18)
+```
+
+---
+
+## TickerTape 시스템
+
+```typescript
+// api/ticker-tape.ts
+// 섹션: 🇰🇷 국장(KOSPI/KOSDAQ) | 🇺🇸 미장(S&P500/NASDAQ/NVDA/AAPL/TSLA) | ₿ 코인(BTC/ETH/SOL) | 💱 외환(USD/KRW)
+// 데이터 소스: Naver Finance(국장) | market_cache+Finnhub(미장) | Upbit(코인) | Frankfurter(환율)
+// 캐시: Cache-Control s-maxage=30, stale-while-revalidate=60
+// 응답: { items: FeedItem[], updatedAt: string }
+
+// src/components/TickerTape.tsx
+// 애니메이션: 순수 CSS @keyframes financy-ticker { 0%→-50% translateX }
+//             will-change: transform (GPU 가속)
+// 루프: 콘텐츠 2× 복제 → -50% 이동 = 끊김 없는 무한 루프 (JS 너비 측정 불필요)
+// Hover: paused state → animationPlayState: 'paused'
+// 색상: 상승=빨강(#ef4444), 하락=파랑(#60a5fa) — 한국 관례
+// SepChip: 섹션 구분자 (보라 글래스모피즘 뱃지)
+// TickerChip: ▲/▼ 화살표 + 가격 + 변동률
+// 폴링: 60초 간격
+```
+
+---
+
+## 시드머니 시스템 (이중 통화)
+
+- **SeedData**: `{ krw: number, usd: number }` — localStorage(`financy_seed`)
+- Portfolio와 RiskCenter 모두 `seed` prop으로 주입받음
+- KRW 시드: 국내주식/현금 기준, USD 시드: 미국주식/코인 기준
+- 환율 적용 후 전체 KRW 환산 비교
+
+---
+
+## RiskCenter.tsx 핵심 로직
+
+### 3대 방어 지표 (DefenseScoreDashboard)
+
+```typescript
+const MKTCFG = {
+  'K-Stock': { beta: 0.85 },
+  'U-Stock': { beta: 1.15 },
+  'Crypto':  { beta: 2.80 },
+  'Cash':    { beta: 0.00 },
+}
+
+// 유동성 지수: (현금 + 주식×0.5) / 시드 × 100 (코인 제외)
+// 변동성 내성: max(0, 100 - 포트폴리오베타 × 33)
+// 집중도 리스크: max(0, 100 - top3자산비중)
+
+function riskColor(score: number) {
+  if (score >= 65) return { text: 'text-emerald-400', label: '안전' }
+  if (score >= 35) return { text: 'text-amber-400',   label: '주의' }
+  return              { text: 'text-rose-400',    label: '위험' }
+}
+```
+
+---
+
+## Analytics.tsx 핵심 로직
+
+### MDD 역사적 위기 시뮬레이션
+
+```typescript
+const MDD_SCENARIOS = [
+  { name: '2008 금융위기',    drawdowns: { 'K-Stock': 54, 'U-Stock': 56, 'Crypto': 0 } },
+  { name: '2020 코로나 충격', drawdowns: { 'K-Stock': 36, 'U-Stock': 34, 'Crypto': 50 } },
+  { name: '2022 긴축 쇼크',   drawdowns: { 'K-Stock': 26, 'U-Stock': 19, 'Crypto': 75 } },
+  { name: '닷컴버블 붕괴',    drawdowns: { 'K-Stock': 55, 'U-Stock': 49, 'Crypto': 0 } },
+]
+```
+
+---
+
+## Settings.tsx 주요 기능
+
+```typescript
+// 닉네임 편집
+// 예약어 검사 (qufskfk123@gmail.com 계정은 우회)
+const RESERVED = ['admin', 'administrator', 'root', ... '관리자', '운영자', ...]
+
+// 이모지 아바타 피커
+// EmojiPickerPopup: "없음" 버튼(EMPTY_EMOJI) + 8열 64이모지 그리드
+
+// 채팅 설정 (ChatSettings)
+// - chatEnabled 토글, badgeEnabled 토글(chat off시 비활성화)
+// - opacity 슬라이더 (min:10, max:100, step:5, accentColor:#6C63FF)
+
+// 저장: 로그인 → supabase.auth.updateUser({ data: { username, avatar_emoji } })
+//       게스트 → localStorage
+```
+
+---
+
+## localStorage 키 목록
+
+| 키 | 내용 |
+|----|------|
+| `financy_assets` | Asset[] (포트폴리오 자산) |
+| `financy_transactions` | Transaction[] (거래 내역) |
+| `financy_tx_init` | 트랜잭션 초기화 여부 플래그 |
+| `financy_seed` | SeedData JSON { krw, usd } |
+| `financy_theme` | 'dark' \| 'light' |
+| `financy_guest_name` | 게스트 닉네임 |
+| `financy_avatar_emoji` | 이모지 아바타 문자열 ('' = 없음) |
+| `financy_avatar_color` | 파스텔 배경색 HEX |
+| `financy_chat_settings` | ChatSettings JSON |
+| `financy_prices` | 가격 캐시 (price-cache.ts) |
+| `financy_fundamentals_cache` | 재무 지표 캐시 |
+
+---
+
+## Supabase 테이블
+
+| 테이블 | 용도 |
+|--------|------|
+| `assets` | 포트폴리오 자산 (RLS: user_id) |
+| `ticker_cache` | 실시간 시세 캐시 (15분 TTL) |
+| `market_cache` | 시장 지표 캐시 (TTL 가변) |
+| `profiles` | 유저 채팅 설정 JSONB (id=user_id, settings=ChatSettings) |
+| `chat_messages` | 실시간 채팅 메시지 (Realtime 활성화) |
+
+---
+
+## 외부 API 데이터 소스
+
+| API | 용도 | 키 필요 |
+|-----|------|---------|
+| Finnhub | 미국 주식 시세/검색/TickerTape(NVDA,AAPL,TSLA) | ✅ VITE_FINNHUB_API_KEY |
+| Naver 주식 | 한국 주식 시세/검색/TickerTape(KOSPI,KOSDAQ) | ❌ |
+| Upbit | 암호화폐 시세/검색/TickerTape(BTC,ETH,SOL) | ❌ |
+| FMP | 재무 지표 (PER, 배당, 베타) | ✅ VITE_FMP_API_KEY |
+| Frankfurter | 환율/TickerTape(USD/KRW) | ❌ |
+| alternative.me | Fear & Greed Index | ❌ |
+| RSS (한경 등) | 뉴스 | ❌ |
+
+---
+
+## CSS 커스텀 클래스 (index.css)
+
+```css
+.card           /* bg-gray-900 border border-gray-800 rounded-2xl p-5 */
+.btn-primary    /* bg-brand-600 text-white rounded-2xl 등 */
+.stat-label     /* text-xs text-gray-500 */
+.mono           /* font-mono */
+.text-rise      /* 상승색 (초록) */
+.text-fall      /* 하락색 (빨강) */
+```
+
+---
+
+## 개발 시 주의사항
+
+1. **TypeScript strict** — `npx tsc --noEmit`으로 항상 검증
+2. **애니메이션 분리**: framer-motion은 App.tsx 페이지 전환 + FloatingChat 드래그에만 사용. TickerTape는 순수 CSS, 기타 토글은 CSS `transition`
+3. **가격 캐시 두 종류**: `priceCache.ts`(Supabase 기반)와 `price-cache.ts`(localStorage 기반) 혼용 — 혼동 주의
+4. **시드 기준 계산**: RiskCenter의 모든 비율은 `seedKRW`(원화시드 + USD시드×환율) 기준
+5. **모바일 대응**: 하단 탭바(`md:hidden`), 메인 컨텐츠 `pb-20 md:pb-0`
+6. **라이트 모드**: `document.documentElement`에 `data-theme="light"` 속성으로 제어
+7. **FeedItem 타입**: `api/ticker-tape.ts`에 정의되나 `tsconfig.app.json`의 `include: ["src"]` 제약으로 `TickerTape.tsx`에서 로컬 재선언하여 사용
+8. **관리자 계정**: `qufskfk123@gmail.com` — 채팅 메시지 삭제 권한, 닉네임 예약어 우회
+9. **채팅 설정 debounce**: 슬라이더 변경은 500ms 후 Supabase 저장 (userIdRef 패턴으로 stale closure 방지)
