@@ -16,7 +16,7 @@ import { randomPastel } from './components/EmojiAvatar'
 import {
   loadLocalSettings, saveLocalSettings,
   fetchRemoteSettings, saveRemoteSettings,
-  type ChatSettings, DEFAULT_SETTINGS,
+  type ChatSettings,
 } from './lib/chatSettings'
 import { supabase } from './lib/supabase'
 import {
@@ -116,7 +116,7 @@ export default function App() {
     return stored
   })
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+  const [, setTransactions] = useState<Transaction[]>(() => {
     backfillTransactions()
     return loadTransactions()
   })

@@ -55,7 +55,10 @@ export async function fetchRemoteSettings(userId: string): Promise<ChatSettings 
       .select('settings')
       .eq('id', userId)
       .maybeSingle()
-    if (data?.settings) return { ...DEFAULT_SETTINGS, ...(data.settings as Partial<ChatSettings>) }
+    if (data) {
+      const raw = (data.settings || {}) as Partial<ChatSettings>
+      return { ...DEFAULT_SETTINGS, ...raw }
+    }
   } catch {}
   return null
 }
@@ -64,6 +67,9 @@ export async function saveRemoteSettings(userId: string, settings: ChatSettings)
   try {
     await supabase
       .from('profiles')
-      .upsert({ id: userId, settings, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+      .upsert(
+        { id: userId, settings: settings as unknown as Record<string, unknown>, updated_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      )
   } catch {}
 }

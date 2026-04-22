@@ -164,19 +164,6 @@ function PieLabelInner({ cx, cy, midAngle, innerRadius, outerRadius, percent }: 
   )
 }
 
-function CustomTooltip({ active, payload, label }: {
-  active?: boolean; payload?: Array<{ value: number }>; label?: string
-}) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="px-3 py-2 rounded-xl border border-gray-800 bg-gray-900/95 backdrop-blur-sm text-xs">
-      <p className="text-gray-400 mb-1">{label}</p>
-      {payload.map((p, i) => (
-        <p key={i} className="text-white font-semibold mono">{fmtMan(p.value)}</p>
-      ))}
-    </div>
-  )
-}
 
 // ── MDD 역사적 위기 시뮬레이션 ────────────────────────────
 
@@ -314,7 +301,7 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
             <Pie data={data} cx="50%" cy="50%" outerRadius={70} innerRadius={40}
               paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}
               animationBegin={0} animationDuration={1500} animationEasing="ease-out"
-              activeIndex={activeIdx} activeShape={renderActiveShape}
+              {...({ activeIndex: activeIdx, activeShape: renderActiveShape } as object)}
               onMouseEnter={(_, i) => setActiveIdx(i)}
               onMouseLeave={() => setActiveIdx(undefined)}>
               {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
@@ -514,9 +501,6 @@ export default function Analytics({ userId }: { userId: string | null }) {
     name: MARKET[g.market].label, value: g.krw, color: MARKET[g.market].color,
   }))
 
-  const barData = byMarket.map(g => ({
-    name: MARKET[g.market].label, value: g.krw, fill: MARKET[g.market].color,
-  }))
 
   const totalPL  = assets.reduce((s, a) => s + totalRealizedPL(a), 0)
   const totalInv = assets.reduce((s, a) => s + totalInvested(a), 0)
@@ -653,7 +637,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
                   data={pieData} cx="50%" cy="50%" outerRadius={80} innerRadius={50}
                   paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}
                   animationBegin={0} animationDuration={1500} animationEasing="ease-out"
-                  activeIndex={pieActiveIdx} activeShape={renderActivePieShape}
+                  {...({ activeIndex: pieActiveIdx, activeShape: renderActivePieShape } as object)}
                   onMouseEnter={(_, index) => setPieActiveIdx(index)}
                   onMouseLeave={() => setPieActiveIdx(undefined)}>
                   {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}

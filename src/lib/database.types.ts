@@ -205,6 +205,24 @@ export interface Database {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          id:         string
+          settings:   Record<string, unknown>
+          updated_at: string
+        }
+        Insert: {
+          id:          string
+          settings?:   Record<string, unknown>
+          updated_at?: string
+        }
+        Update: {
+          id?:         string
+          settings?:   Record<string, unknown>
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
   }
 }
