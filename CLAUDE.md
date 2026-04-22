@@ -197,14 +197,14 @@ export function avatarFromUserId(userId: string): { emoji: string; color: string
 // 응답: { items: FeedItem[], updatedAt: string }
 
 // src/components/TickerTape.tsx
-// 애니메이션: 순수 CSS @keyframes financy-ticker { 0%→-50% translateX }
-//             will-change: transform (GPU 가속)
-// 루프: 콘텐츠 2× 복제 → -50% 이동 = 끊김 없는 무한 루프 (JS 너비 측정 불필요)
+// 애니메이션: 순수 CSS @keyframes financy-ticker, COPIES=4, SHIFT=-25% (끊김 없는 루프)
 // Hover: paused state → animationPlayState: 'paused'
-// 색상: 상승=빨강(#ef4444), 하락=파랑(#60a5fa) — 한국 관례
-// SepChip: 섹션 구분자 (보라 글래스모피즘 뱃지)
-// TickerChip: ▲/▼ 화살표 + 가격 + 변동률
+// 색상: 상승=빨강(#ef4444), 하락=파랑(#3b82f6) — 한국 관례, 환율=노랑(#eab308)
+// SepChip: 제거됨 (섹션 구분자 없음)
+// TickerChip: symbol(12px bold) + name(9px 2줄) + 가격 + ▲/▼ 변동률
 // 폴링: 60초 간격
+// 테마: CSS 변수 --ticker-bg/border/fade/symbol/name/price/sep
+//   dark:  배경 rgba(3,7,18,0.92), 라이트: rgba(248,248,255,0.97) + 인디고 테두리
 ```
 
 ---
@@ -328,21 +328,107 @@ const RESERVED = ['admin', 'administrator', 'root', ... '관리자', '운영자'
 .card           /* bg-gray-900 border border-gray-800 rounded-2xl p-5 */
 .btn-primary    /* bg-brand-600 text-white rounded-2xl 등 */
 .stat-label     /* text-xs text-gray-500 */
-.mono           /* font-mono */
-.text-rise      /* 상승색 (초록) */
-.text-fall      /* 하락색 (빨강) */
+.mono           /* font-mono tabular-nums */
+.text-rise      /* 상승색 (다크=cyan, 라이트=파랑) */
+.text-fall      /* 하락색 (다크=핑크, 라이트=빨강) */
 ```
+
+### CSS 변수 전체 목록 (index.css :root / [data-theme="light"])
+
+```css
+/* Gauge SVG */
+--gauge-panel-fill, --gauge-text-rect, --gauge-halo
+--gauge-sub-color, --gauge-baseline, --gauge-tick-dim, --gauge-edge-label
+
+/* MarketTempCard (유동성 항해) */
+--mtp-bg, --mtp-border
+--mtp-tank-bg, --mtp-tank-border, --mtp-tank-shadow
+--mtp-idx-bg, --mtp-idx-border
+--mtp-skel-bg, --mtp-scale-color
+--mtp-zone-label   /* 활성 존 텍스트: dark=#ffffff / light=#0a0a18 */
+--mtp-zone-past    /* 비활성 존 (지난): 반투명 */
+--mtp-zone-inactive/* 비활성 존 (미래): 더 반투명 */
+--mtp-zone-divider /* 존 구분선 */
+
+/* TickerTape */
+--ticker-bg, --ticker-border, --ticker-fade
+--ticker-symbol, --ticker-name, --ticker-price, --ticker-sep
+```
+
+---
+
+## 폰트 시스템
+
+- **본문 폰트**: `Inter` (Latin/숫자) + `Noto Sans KR` (한글) — Google Fonts
+- **모노 폰트**: `JetBrains Mono` — 숫자/코드
+- **기본 크기**: `16.5px` (Tailwind base × 스케일)
+- **행간**: `line-height: 1.6`
+- **Tabular nums**: `font-variant-numeric: tabular-nums` body 전역 적용 → 숫자 흔들림 방지
+- **tailwind.config.js** fontFamily.sans: `['Inter', 'Noto Sans KR', 'system-ui', 'sans-serif']`
 
 ---
 
 ## 개발 시 주의사항
 
-1. **TypeScript strict** — `npx tsc --noEmit`으로 항상 검증
-2. **애니메이션 분리**: framer-motion은 App.tsx 페이지 전환 + FloatingChat 드래그에만 사용. TickerTape는 순수 CSS, 기타 토글은 CSS `transition`
+1. **TypeScript strict** — `npx tsc --project tsconfig.app.json --noEmit`으로 검증 (tsconfig.app.json에 noUnusedLocals: true)
+2. **애니메이션 분리**: framer-motion은 App.tsx 페이지 전환 + FloatingChat 드래그 + MarketTempCard 수위에만 사용. TickerTape는 순수 CSS, FearGreedGauge는 SVG + CSS transform
 3. **가격 캐시 두 종류**: `priceCache.ts`(Supabase 기반)와 `price-cache.ts`(localStorage 기반) 혼용 — 혼동 주의
 4. **시드 기준 계산**: RiskCenter의 모든 비율은 `seedKRW`(원화시드 + USD시드×환율) 기준
 5. **모바일 대응**: 하단 탭바(`md:hidden`), 메인 컨텐츠 `pb-20 md:pb-0`
-6. **라이트 모드**: `document.documentElement`에 `data-theme="light"` 속성으로 제어
+6. **라이트 모드**: `document.documentElement`에 `data-theme="light"` 속성으로 제어. inline style={{}}은 CSS 변수(var(--name))로만 테마 반응
 7. **FeedItem 타입**: `api/ticker-tape.ts`에 정의되나 `tsconfig.app.json`의 `include: ["src"]` 제약으로 `TickerTape.tsx`에서 로컬 재선언하여 사용
 8. **관리자 계정**: `qufskfk123@gmail.com` — 채팅 메시지 삭제 권한, 닉네임 예약어 우회
 9. **채팅 설정 debounce**: 슬라이더 변경은 500ms 후 Supabase 저장 (userIdRef 패턴으로 stale closure 방지)
+10. **Recharts 타입 우회**: `activeIndex`, `activeShape`, `cornerRadius` 등 런타임엔 작동하나 TS 타입에 없는 prop은 `{...({ prop: val } as object)}` 패턴으로 전달
+
+---
+
+## UI 리팩토링 이력
+
+### FearGreedGauge (Dashboard.tsx)
+- 바늘(needle) 완전 제거
+- 중앙: 점수 숫자 제거 → 상태명만 표시 (극단 공포/공포/중립/탐욕/극단 탐욕)
+  - 큰 점수 숫자는 카드 아래 `text-6xl`로 별도 표시
+- 세그먼트 활성화: `transform: scale(1.07)` + `cubic-bezier(0.34,1.56,0.64,1)` 스프링 애니메이션
+- SVG `feGaussianBlur` 필터로 활성 구간 네온 글로우
+- 베이스라인(가로선) 제거, 중앙 배경 rect 제거
+- 공포/탐욕 레이블 위치: `mt-5`
+
+### MarketTempCard / 유동성 항해 (Dashboard.tsx)
+- 수조 탱크 높이: `88px → 108px`
+- 존 오버레이: `z-[6]`, 이모지 `33px`, 레이블 `16px bold`, 점수 `14px`
+- 활성 존: `scale(1.15)` + 이중 `drop-shadow` 글로우, `opacity:1`
+- 비활성 존: `opacity:0.3` (균등 처리, past/future 구분 없음)
+- 텍스트 색상: `var(--mtp-zone-label)` — dark=`#ffffff` / light=`#0a0a18`
+- 물 그라디언트 투명도: hex alpha `12/0a` (매우 투명)
+- 파도 속도(waveSpeed): 전 구간 절반 이하로 감소
+- 네온 글로우(inset boxShadow 레이어) 제거
+- 수위 스케일 숫자: `text-slate-300`
+
+### Analytics.tsx 도넛 차트 3종
+| 차트 | outerRadius | innerRadius | 비고 |
+|------|-------------|-------------|------|
+| 섹터 분포 | 70 | 54 | ring 16px |
+| 자산 배분 | 82 | 62 | ring 20px |
+| 시장별 분포 | 82 | 62 | ring 20px |
+- `cornerRadius={4}`, `paddingAngle={4}` 전체 적용
+- activeShape: 반투명 글로우 레이어(opacity 0.18) + 확장 레이어 2중 구조
+- 툴팁: `backdropFilter: blur(16px)` 유리 질감 + drop-shadow
+- 중앙 hover 디테일: 마우스오버 시 → 항목명(존 색상)+금액+비율 / 평상시 → 총합
+- `PieLabelInner` 제거 (얇은 링에 내부 레이블 불필요)
+- `animationDuration={1200}`, `animationEasing="ease-out"` 통일
+
+### Dashboard 폰트/여백 시스템
+- 페이지 제목: `text-2xl`, 날짜: `text-sm text-slate-500`
+- SectionTitle: `text-base tracking-tight`, 아이콘 `w-5 h-5`
+- 환율·금리 핵심 수치: `text-lg font-bold tracking-tight`
+- 금리 항목 간격: `space-y-4`, 환율 행 높이: `py-3`
+- 뉴스: `text-slate-200`, 출처 `text-slate-500`
+- 그리드 gap: `md:gap-6`, 우측 컬럼 `md:space-y-4`
+
+### RiskCenter.tsx ScoreGauge 폰트
+- 지표명(유동성 지수 등): `text-[10px]` → `text-xs`
+- 위험 레벨(주의/안전/위험): `text-[10px]` → `text-xs`
+- 보조 수치(64% 등): `text-[9px]` → `text-[11px] text-gray-500`
+- 하단 기준 설명: `text-[9px]` → `text-[11px] text-gray-600`
+- 종합 점수 배지: `text-[10px]` → `text-xs`

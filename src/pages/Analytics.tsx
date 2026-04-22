@@ -146,23 +146,6 @@ function StatCard({ label, value, sub, rising }: {
   )
 }
 
-const RADIAN = Math.PI / 180
-
-function PieLabelInner({ cx, cy, midAngle, innerRadius, outerRadius, percent }: {
-  cx: number; cy: number; midAngle: number;
-  innerRadius: number; outerRadius: number; percent: number
-}) {
-  if (percent < 0.05) return null
-  const r = innerRadius + (outerRadius - innerRadius) * 0.5
-  const x = cx + r * Math.cos(-midAngle * RADIAN)
-  const y = cy + r * Math.sin(-midAngle * RADIAN)
-  return (
-    <text x={x} y={y} fill="#F4F4FF" fontSize={11} fontWeight={600}
-      textAnchor="middle" dominantBaseline="central">
-      {`${(percent * 100).toFixed(0)}%`}
-    </text>
-  )
-}
 
 
 // ── MDD 역사적 위기 시뮬레이션 ────────────────────────────
@@ -276,19 +259,28 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
   const total = data.reduce((s, d) => s + d.value, 0)
 
   const tooltipStyle = {
-    background: 'rgba(13,13,31,0.95)',
-    border: '1px solid rgba(108,99,255,0.15)',
-    borderRadius: '12px',
+    background: 'rgba(10,10,28,0.90)',
+    backdropFilter: 'blur(16px)',
+    border: '1px solid rgba(255,255,255,0.09)',
+    borderRadius: '14px',
     color: '#F4F4FF',
     fontSize: '12px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+    padding: '9px 13px',
   }
 
   function renderActiveShape(props: any) {
     const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
     return (
-      <Sector cx={cx} cy={cy}
-        innerRadius={innerRadius} outerRadius={outerRadius + 6}
-        startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      <g>
+        <Sector cx={cx} cy={cy}
+          innerRadius={innerRadius - 4} outerRadius={outerRadius + 14}
+          startAngle={startAngle} endAngle={endAngle}
+          fill={fill} opacity={0.18} />
+        <Sector cx={cx} cy={cy}
+          innerRadius={innerRadius} outerRadius={outerRadius + 7}
+          startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      </g>
     )
   }
 
@@ -298,9 +290,10 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
       <div style={{ width: '100%', height: 180, position: 'relative' }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={data} cx="50%" cy="50%" outerRadius={70} innerRadius={40}
-              paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}
-              animationBegin={0} animationDuration={1500} animationEasing="ease-out"
+            <Pie data={data} cx="50%" cy="50%" outerRadius={70} innerRadius={54}
+              paddingAngle={4} dataKey="value" labelLine={false}
+              {...({ cornerRadius: 4 } as object)}
+              animationBegin={0} animationDuration={1200} animationEasing="ease-out"
               {...({ activeIndex: activeIdx, activeShape: renderActiveShape } as object)}
               onMouseEnter={(_, i) => setActiveIdx(i)}
               onMouseLeave={() => setActiveIdx(undefined)}>
@@ -309,12 +302,19 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
             <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}개 종목`, '']} />
           </PieChart>
         </ResponsiveContainer>
-        {activeIdx === undefined && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-base font-bold mono text-gray-200">{total}</span>
-            <span className="text-[10px] text-gray-500">종목</span>
-          </div>
-        )}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          {activeIdx !== undefined ? (
+            <>
+              <span className="text-[11px] font-semibold text-center leading-tight px-2" style={{ color: data[activeIdx]?.color }}>{data[activeIdx]?.name}</span>
+              <span className="text-[10px] text-gray-400 mono">{total > 0 ? ((data[activeIdx]?.value / total) * 100).toFixed(0) : 0}%</span>
+            </>
+          ) : (
+            <>
+              <span className="text-base font-bold mono text-gray-200">{total}</span>
+              <span className="text-[10px] text-gray-500">종목</span>
+            </>
+          )}
+        </div>
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-2">
         {data.map((entry, i) => (
@@ -547,13 +547,19 @@ export default function Analytics({ userId }: { userId: string | null }) {
   const hasTickerAssets = assets.some(a => resolveTickerForAsset(a))
   const isFetching      = fetchingIds.size > 0
 
-  // ── Active Pie Shape ───────────────────────────────────────
+  // ── Active Pie Shape (글로우 레이어 + 확장) ────────────────
   function renderActivePieShape(props: any) {
     const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
     return (
-      <Sector cx={cx} cy={cy}
-        innerRadius={innerRadius} outerRadius={outerRadius + 8}
-        startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      <g>
+        <Sector cx={cx} cy={cy}
+          innerRadius={innerRadius - 4} outerRadius={outerRadius + 16}
+          startAngle={startAngle} endAngle={endAngle}
+          fill={fill} opacity={0.18} />
+        <Sector cx={cx} cy={cy}
+          innerRadius={innerRadius} outerRadius={outerRadius + 8}
+          startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      </g>
     )
   }
 
@@ -594,11 +600,14 @@ export default function Analytics({ userId }: { userId: string | null }) {
 
   // ── 정상 렌더링 ────────────────────────────────────────────
   const tooltipStyle = {
-    background: 'rgba(13,13,31,0.95)',
-    border: '1px solid rgba(108,99,255,0.15)',
-    borderRadius: '12px',
+    background: 'rgba(10,10,28,0.90)',
+    backdropFilter: 'blur(16px)',
+    border: '1px solid rgba(255,255,255,0.09)',
+    borderRadius: '14px',
     color: '#F4F4FF',
     fontSize: '12px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+    padding: '9px 13px',
   }
 
   return (
@@ -640,9 +649,10 @@ export default function Analytics({ userId }: { userId: string | null }) {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={pieData} cx="50%" cy="50%" outerRadius={80} innerRadius={50}
-                  paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}
-                  animationBegin={0} animationDuration={1500} animationEasing="ease-out"
+                  data={pieData} cx="50%" cy="50%" outerRadius={82} innerRadius={62}
+                  paddingAngle={4} dataKey="value" labelLine={false}
+                  {...({ cornerRadius: 4 } as object)}
+                  animationBegin={0} animationDuration={1200} animationEasing="ease-out"
                   {...({ activeIndex: pieActiveIdx, activeShape: renderActivePieShape } as object)}
                   onMouseEnter={(_, index) => setPieActiveIdx(index)}
                   onMouseLeave={() => setPieActiveIdx(undefined)}>
@@ -651,10 +661,20 @@ export default function Analytics({ userId }: { userId: string | null }) {
                 <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
               </PieChart>
             </ResponsiveContainer>
-            {pieData.length > 0 && pieActiveIdx === undefined && (
+            {pieData.length > 0 && (
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-sm font-bold mono text-gray-200">{fmtMan(totalKrw)}</span>
-                <span className="text-[10px] text-gray-500">총 보유</span>
+                {pieActiveIdx !== undefined ? (
+                  <>
+                    <span className="text-[11px] font-semibold text-center leading-tight px-4" style={{ color: pieData[pieActiveIdx]?.color }}>{pieData[pieActiveIdx]?.name}</span>
+                    <span className="text-sm font-bold mono text-gray-200">{fmtMan(pieData[pieActiveIdx]?.value ?? 0)}</span>
+                    <span className="text-[10px] text-gray-500">{totalKrw > 0 ? ((pieData[pieActiveIdx]?.value ?? 0) / totalKrw * 100).toFixed(1) : 0}%</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm font-bold mono text-gray-200">{fmtMan(totalKrw)}</span>
+                    <span className="text-[10px] text-gray-500">총 보유</span>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -682,9 +702,10 @@ export default function Analytics({ userId }: { userId: string | null }) {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={pieData} cx="50%" cy="50%" outerRadius={80} innerRadius={50}
-                  paddingAngle={3} dataKey="value" labelLine={false} label={PieLabelInner as any}
-                  animationBegin={0} animationDuration={1500} animationEasing="ease-out"
+                  data={pieData} cx="50%" cy="50%" outerRadius={82} innerRadius={62}
+                  paddingAngle={4} dataKey="value" labelLine={false}
+                  {...({ cornerRadius: 4 } as object)}
+                  animationBegin={0} animationDuration={1200} animationEasing="ease-out"
                   {...({ activeIndex: barActiveIdx, activeShape: renderActivePieShape } as object)}
                   onMouseEnter={(_, index) => setBarActiveIdx(index)}
                   onMouseLeave={() => setBarActiveIdx(undefined)}>
@@ -693,10 +714,20 @@ export default function Analytics({ userId }: { userId: string | null }) {
                 <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
               </PieChart>
             </ResponsiveContainer>
-            {pieData.length > 0 && barActiveIdx === undefined && (
+            {pieData.length > 0 && (
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-base font-bold mono text-gray-200">{pieData.length}</span>
-                <span className="text-[10px] text-gray-500">시장</span>
+                {barActiveIdx !== undefined ? (
+                  <>
+                    <span className="text-[11px] font-semibold" style={{ color: pieData[barActiveIdx]?.color }}>{pieData[barActiveIdx]?.name}</span>
+                    <span className="text-sm font-bold mono text-gray-200">{fmtMan(pieData[barActiveIdx]?.value ?? 0)}</span>
+                    <span className="text-[10px] text-gray-500">{totalKrw > 0 ? ((pieData[barActiveIdx]?.value ?? 0) / totalKrw * 100).toFixed(1) : 0}%</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-base font-bold mono text-gray-200">{pieData.length}</span>
+                    <span className="text-[10px] text-gray-500">시장</span>
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -46,6 +46,18 @@
   --mtp-idx-border:    rgba(71, 85, 105, 0.20);
   --mtp-skel-bg:       rgba(30, 41, 59, 0.40);
   --mtp-scale-color:   rgba(148, 163, 184, 0.35);
+  --mtp-zone-label:    #ffffff;
+  --mtp-zone-past:     rgba(148, 163, 184, 0.45);
+  --mtp-zone-inactive: rgba(100, 116, 139, 0.35);
+  --mtp-zone-divider:  rgba(148, 163, 184, 0.10);
+  /* Ticker tape */
+  --ticker-bg:         rgba(3, 7, 18, 0.92);
+  --ticker-border:     rgba(255, 255, 255, 0.06);
+  --ticker-fade:       rgba(3, 7, 18, 0.92);
+  --ticker-symbol:     #f3f4f6;
+  --ticker-name:       #6b7280;
+  --ticker-price:      #9ca3af;
+  --ticker-sep:        #374151;
 }
 
 [data-theme="light"] {
@@ -82,13 +94,27 @@
   --mtp-idx-border:    rgba(91, 85, 204, 0.12);
   --mtp-skel-bg:       rgba(215, 215, 240, 0.60);
   --mtp-scale-color:   rgba(91, 85, 204, 0.30);
+  --mtp-zone-label:    #0a0a18;
+  --mtp-zone-past:     rgba(91, 85, 204, 0.35);
+  --mtp-zone-inactive: rgba(91, 85, 204, 0.22);
+  --mtp-zone-divider:  rgba(91, 85, 204, 0.12);
+  /* Ticker tape (light) */
+  --ticker-bg:         rgba(248, 248, 255, 0.97);
+  --ticker-border:     rgba(91, 85, 204, 0.18);
+  --ticker-fade:       rgba(248, 248, 255, 0.97);
+  --ticker-symbol:     #1e1b4b;
+  --ticker-name:       #6b7280;
+  --ticker-price:      #374151;
+  --ticker-sep:        #d1d5db;
 }
 
 /* ── Base ──────────────────────────────────────────────────── */
 @layer base {
   body {
     @apply bg-gray-950 text-gray-100 font-sans antialiased;
-    font-size: 15px;
+    font-size: 16.5px;
+    line-height: 1.6;
+    font-variant-numeric: tabular-nums;
     transition: background-color 0.25s ease, color 0.25s ease;
   }
 

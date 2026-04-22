@@ -39,13 +39,17 @@ function TickerChip({ item }: { item: Extract<FeedItem, { kind: 'ticker' }> }) {
   const sign  = up ? '+' : ''
 
   return (
-    <span className="inline-flex items-center gap-2 mx-8 shrink-0 select-none">
-      <span className="text-[13px] font-bold text-gray-100 tracking-wide">{item.symbol}</span>
-      <span className="text-[13px] text-gray-400 font-mono">{fmtPrice(item.price, item.currency)}</span>
+    <span className="inline-flex items-center gap-2.5 mx-8 shrink-0 select-none">
+      {/* 심볼 + 이름 (세로 2줄) */}
+      <span className="flex flex-col leading-none gap-[2px]">
+        <span className="text-[12px] font-bold tracking-wide" style={{ color: 'var(--ticker-symbol)' }}>{item.symbol}</span>
+        <span className="text-[9px] truncate max-w-[68px]" style={{ color: 'var(--ticker-name)' }}>{item.name}</span>
+      </span>
+      <span className="text-[13px] font-mono" style={{ color: 'var(--ticker-price)' }}>{fmtPrice(item.price, item.currency)}</span>
       <span className="text-[12px] font-mono font-semibold" style={{ color }}>
         {arrow} {sign}{item.changePct.toFixed(2)}%
       </span>
-      <span className="text-gray-700 text-xs">|</span>
+      <span className="text-xs" style={{ color: 'var(--ticker-sep)' }}>|</span>
     </span>
   )
 }
@@ -101,9 +105,9 @@ export default function TickerTape() {
       <div
         className="w-full h-10 overflow-hidden flex items-center relative shrink-0"
         style={{
-          background: 'rgba(3,7,18,0.92)',
+          background: 'var(--ticker-bg)',
           backdropFilter: 'blur(8px)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid var(--ticker-border)',
           zIndex: 40,
         }}
         onMouseEnter={() => setPaused(true)}
@@ -113,11 +117,11 @@ export default function TickerTape() {
         {/* 좌우 페이드 마스크 */}
         <div
           className="absolute left-0 top-0 bottom-0 w-12 pointer-events-none z-10"
-          style={{ background: 'linear-gradient(to right, rgba(3,7,18,0.92), transparent)' }}
+          style={{ background: `linear-gradient(to right, var(--ticker-fade), transparent)` }}
         />
         <div
           className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none z-10"
-          style={{ background: 'linear-gradient(to left, rgba(3,7,18,0.92), transparent)' }}
+          style={{ background: `linear-gradient(to left, var(--ticker-fade), transparent)` }}
         />
 
         {/* 스크롤 트랙: COPIES벌 복제 후 -(1/COPIES)% 이동 = 1벌 너비만큼 이동 */}

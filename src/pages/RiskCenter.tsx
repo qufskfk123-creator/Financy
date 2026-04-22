@@ -219,11 +219,11 @@ function ScoreGauge({ label, score, sub, icon: Icon }: {
       </div>
       <div className="text-center space-y-0.5">
         <div className="flex items-center justify-center gap-1">
-          <Icon className={`w-3 h-3 ${rc.text}`} />
-          <p className="text-[10px] text-gray-400 font-medium">{label}</p>
+          <Icon className={`w-3.5 h-3.5 ${rc.text}`} />
+          <p className="text-xs text-gray-400 font-medium">{label}</p>
         </div>
-        <p className={`text-[10px] font-bold ${rc.text}`}>{rc.label}</p>
-        {sub && <p className="text-[9px] text-gray-600 mono">{sub}</p>}
+        <p className={`text-xs font-bold ${rc.text}`}>{rc.label}</p>
+        {sub && <p className="text-[11px] text-gray-500 mono">{sub}</p>}
       </div>
     </div>
   )
@@ -242,7 +242,7 @@ function DefenseScoreDashboard({ scores, hasSeed }: { scores: DefenseScores; has
           <ShieldAlert className={`w-4 h-4 ${rc.text}`} />
           <span className="text-sm font-semibold text-gray-200">3대 방어 지표</span>
         </div>
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${rc.bg} ${rc.border} border ${rc.text}`}>
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${rc.bg} ${rc.border} border ${rc.text}`}>
           종합 {overall}점 · {rc.label}
         </div>
       </div>
@@ -272,13 +272,13 @@ function DefenseScoreDashboard({ scores, hasSeed }: { scores: DefenseScores; has
       {scores.top3Pct > 50 && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/25">
           <Flame className="w-3.5 h-3.5 text-orange-400 flex-shrink-0 mt-0.5" />
-          <p className="text-[10px] text-orange-300 leading-relaxed">
+          <p className="text-xs text-orange-300 leading-relaxed">
             상위 3개 종목({scores.top3Names.slice(0, 2).join(', ')}{scores.top3Names.length > 2 ? ' 외' : ''})이 시드의 {scores.top3Pct.toFixed(0)}%를 차지합니다. 분산 투자를 권장합니다.
           </p>
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-1 text-center text-[9px] text-gray-700 border-t border-gray-800/60 pt-2">
+      <div className="grid grid-cols-3 gap-1 text-center text-[11px] text-gray-600 border-t border-gray-800/60 pt-2">
         <span>현금+우량주 / 시드</span>
         <span>포트폴리오 β → 점수</span>
         <span>상위3 비중 기반</span>
