@@ -634,7 +634,7 @@ export default function Dashboard() {
      * 모바일: px-4 py-5 (일반 스크롤)
      * 데스크톱(md+): h-full flex flex-col overflow-hidden → 한 화면에 전부 표시
      */
-    <div className="px-4 py-5 md:h-full md:px-6 md:py-5 md:flex md:flex-col md:overflow-hidden">
+    <div className="px-4 py-5 md:px-5 lg:h-full lg:px-6 lg:py-5 lg:flex lg:flex-col lg:overflow-hidden">
 
       {/* ── 헤더 ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-5 flex-shrink-0">
@@ -659,12 +659,12 @@ export default function Dashboard() {
       ── */}
       <div className="
         space-y-4
-        md:space-y-0 md:flex-1 md:min-h-0
-        md:grid md:grid-cols-[360px_1fr] md:gap-6
+        lg:space-y-0 lg:flex-1 lg:min-h-0
+        lg:grid lg:grid-cols-[340px_1fr] lg:gap-6
       ">
 
         {/* ╔══ 좌: 게이지 카드 ══════════════════════════════╗ */}
-        <div className="card flex flex-col items-center md:overflow-hidden">
+        <div className="card flex flex-col items-center lg:overflow-hidden">
           {/* 카드 타이틀 */}
           <div className="flex items-center justify-between w-full mb-5">
             <div className="flex items-center gap-2">
@@ -675,7 +675,7 @@ export default function Dashboard() {
           </div>
 
           {/* Recharts 게이지 */}
-          <div className="w-full max-w-xs mx-auto md:max-w-[288px]">
+          <div className="w-full max-w-xs mx-auto lg:max-w-[288px]">
             <FearGreedGauge value={fgValue} loading={fg.loading} />
           </div>
 
@@ -714,7 +714,7 @@ export default function Dashboard() {
         {/* ╚══════════════════════════════════════════════════╝ */}
 
         {/* ╔══ 우: 카드 열 ══════════════════════════════════╗ */}
-        <div className="space-y-4 md:space-y-4 md:overflow-y-auto md:min-h-0 md:pr-1">
+        <div className="space-y-4 lg:overflow-y-auto lg:min-h-0 lg:pr-1">
 
           {/* ── 자금흐름 온도계 ── */}
           <MarketTempCard data={liq.data} loading={liq.loading} />
@@ -831,19 +831,19 @@ export default function Dashboard() {
               <div className="divide-y divide-gray-800/70">
                 {/* 데스크톱: 4개, 모바일: 6개 */}
                 {news.items.slice(0, 6).map((item, i) => (
-                  <div key={i} className={`py-3.5 first:pt-0 last:pb-0 group ${i >= 4 ? 'md:hidden' : ''}`}>
+                  <div key={i} className={`py-3.5 first:pt-0 last:pb-0 group ${i >= 4 ? 'lg:hidden' : ''}`}>
                     {item.link ? (
                       <a href={item.link} target="_blank" rel="noopener noreferrer"
                         className="flex items-start gap-2 group">
                         <span className="flex-1 text-slate-200 text-sm leading-snug
                                         group-hover:text-white transition-colors
-                                        md:truncate md:block">
+                                        lg:truncate lg:block">
                           {item.title}
                         </span>
                         <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 flex-shrink-0 mt-0.5 transition-colors" />
                       </a>
                     ) : (
-                      <p className="text-slate-200 text-sm leading-snug md:truncate">{item.title}</p>
+                      <p className="text-slate-200 text-sm leading-snug lg:truncate">{item.title}</p>
                     )}
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <span className="text-xs text-slate-500">{item.source}</span>

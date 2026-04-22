@@ -59,16 +59,17 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
   return (
     <>
       {/* ── 데스크톱 사이드바 (md 이상) ── */}
-      <aside className="hidden md:flex w-64 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex-col">
+      {/* md: 아이콘 전용 좁은 사이드바(w-16), lg+: 전체 사이드바(w-64) */}
+      <aside className="hidden md:flex md:w-16 lg:w-64 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex-col transition-[width] duration-200">
         {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-6 border-b border-gray-800">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center">
+        <div className="h-16 flex items-center justify-center lg:justify-between lg:px-6 border-b border-gray-800 flex-shrink-0">
+          <div className="flex items-center justify-center lg:justify-start gap-2">
+            <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center flex-shrink-0">
               <Zap className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-lg text-white tracking-tight">Financy</span>
+            <span className="hidden lg:block font-semibold text-lg text-white tracking-tight">Financy</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="hidden lg:flex items-center gap-1">
             <button
               onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}
               title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
@@ -93,31 +94,32 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
-          <p className="px-3 pt-2 pb-1.5 text-xs font-semibold text-gray-600 uppercase tracking-widest">메뉴</p>
+        <nav className="flex-1 md:px-2 lg:px-3 py-4 space-y-0.5 overflow-y-auto">
+          <p className="hidden lg:block px-3 pt-2 pb-1.5 text-xs font-semibold text-gray-600 uppercase tracking-widest">메뉴</p>
           {navItems.map(({ id, label, icon: Icon }) => {
             const active = currentPage === id
             return (
               <button
                 key={id}
                 onClick={() => onNavigate(id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition-colors duration-150 ${
+                title={label}
+                className={`w-full flex items-center justify-center lg:justify-start gap-3 lg:px-3 py-2.5 rounded-xl text-[15px] font-medium transition-colors duration-150 ${
                   active
                     ? 'bg-brand-600/20 text-brand-400'
                     : 'text-gray-300 hover:text-white hover:bg-gray-800'
                 }`}
               >
                 <Icon className="w-[18px] h-[18px] flex-shrink-0" />
-                {label}
-                {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-brand-400" />}
+                <span className="hidden lg:block">{label}</span>
+                {active && <div className="hidden lg:block ml-auto w-1.5 h-1.5 rounded-full bg-brand-400" />}
               </button>
             )
           })}
         </nav>
 
         {/* User */}
-        <div className="p-4 border-t border-gray-800 space-y-2">
-          <div className="flex items-center gap-3 px-2">
+        <div className="md:p-2 lg:p-4 border-t border-gray-800 space-y-2 flex-shrink-0">
+          <div className="flex items-center justify-center lg:justify-start gap-3 lg:px-2">
             {userName ? (
               <EmojiAvatar emoji={userAvatar} color={avatarColor} size="sm" />
             ) : (
@@ -125,7 +127,7 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
                 <User className="w-4 h-4 text-gray-400" />
               </div>
             )}
-            <div className="flex-1 min-w-0">
+            <div className="hidden lg:block flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">{userName ?? 'Guest'}</p>
               <p className="text-xs text-gray-500 truncate">
                 {userEmail ?? '로그인 전 익명 상태'}
@@ -139,17 +141,21 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-2xl
                          border border-gray-700 hover:border-gray-600
                          text-gray-400 hover:text-white text-sm font-medium transition-all duration-150 active:scale-95"
+              title="로그아웃"
             >
               <LogOut className="w-4 h-4" />
-              로그아웃
+              <span className="hidden lg:block">로그아웃</span>
             </button>
           ) : (
             <button
               onClick={onAuthClick}
-              className="w-full btn-primary text-sm"
+              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-2xl
+                         bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold
+                         transition-all duration-150 active:scale-95"
+              title="로그인 / 회원가입"
             >
               <LogIn className="w-4 h-4" />
-              로그인 / 회원가입
+              <span className="hidden lg:block">로그인 / 회원가입</span>
             </button>
           )}
         </div>
