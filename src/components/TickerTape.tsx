@@ -24,26 +24,6 @@ function fmtPrice(price: number, currency: 'KRW' | 'USD'): string {
   return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-// ── 섹션 구분 칩 ──────────────────────────────────────────────────
-
-function SepChip({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center mx-4 shrink-0 select-none">
-      <span
-        className="text-[11px] font-semibold tracking-widest px-2 py-0.5 rounded-full"
-        style={{
-          background: 'rgba(108,99,255,0.18)',
-          border: '1px solid rgba(108,99,255,0.35)',
-          color: '#a99dff',
-          letterSpacing: '0.08em',
-        }}
-      >
-        {label}
-      </span>
-    </span>
-  )
-}
-
 // ── 시세 칩 ───────────────────────────────────────────────────────
 
 function TickerChip({ item }: { item: Extract<FeedItem, { kind: 'ticker' }> }) {
@@ -105,8 +85,9 @@ export default function TickerTape() {
 
   if (items.length === 0) return null
 
-  const duration = durationRef.current ?? 35
-  const track    = Array.from({ length: COPIES }, () => items).flat()
+  const duration    = durationRef.current ?? 35
+  const tickerItems = items.filter((i): i is Extract<FeedItem, { kind: 'ticker' }> => i.kind === 'ticker')
+  const track       = Array.from({ length: COPIES }, () => tickerItems).flat()
 
   return (
     <>
@@ -148,11 +129,7 @@ export default function TickerTape() {
             animationPlayState: paused ? 'paused' : 'running',
           }}
         >
-          {track.map((item, i) =>
-            item.kind === 'sep'
-              ? <SepChip key={i} label={item.label} />
-              : <TickerChip key={i} item={item} />
-          )}
+          {track.map((item, i) => <TickerChip key={i} item={item} />)}
         </div>
       </div>
     </>

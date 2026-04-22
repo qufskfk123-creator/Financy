@@ -149,7 +149,7 @@ function FearGreedGauge({ value, loading }: { value: number; loading: boolean })
         })}
 
         {/* 중앙 원 배경 */}
-        <circle cx={CX} cy={CY} r={R1 - 2} fill="rgba(3,7,18,0.95)" />
+        <circle cx={CX} cy={CY} r={R1 - 2} style={{ fill: 'var(--gauge-panel-fill)' }} />
 
         {/* 중심 축 dot */}
         {!loading && <circle cx={CX} cy={CY} r="5" fill={color} />}
@@ -157,10 +157,10 @@ function FearGreedGauge({ value, loading }: { value: number; loading: boolean })
         {/* 텍스트 배경 패드 */}
         {!loading && (
           <rect x={CX - 34} y={CY - 46} width={68} height={44} rx={6}
-            fill="rgba(3,7,18,0.94)" />
+            style={{ fill: 'var(--gauge-text-rect)' }} />
         )}
 
-        {/* 바늘 — rect 위, 텍스트 아래 순서로 렌더 */}
+        {/* 바늘 */}
         {!loading && (
           <g style={{
             transformOrigin: `${CX}px ${CY}px`,
@@ -168,33 +168,53 @@ function FearGreedGauge({ value, loading }: { value: number; loading: boolean })
             transition: 'transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1)',
           }}>
             <line x1={CX} y1={CY} x2={CX + R1 - 6} y2={CY}
-              stroke={color} strokeWidth="4" strokeLinecap="round"
-              opacity="0.95" />
+              stroke={color} strokeWidth="4" strokeLinecap="round" opacity="0.95" />
           </g>
         )}
 
-        {/* 텍스트 — 다크 할로로 바늘과 겹쳐도 가독성 유지 */}
+        {/* 텍스트 */}
         {loading ? (
           <rect x="62" y="55" width="76" height="32" rx="8" fill="#1f2937" opacity="0.6" />
         ) : (
           <>
             <text x={CX} y={CY - 24} textAnchor="middle" dominantBaseline="middle"
               fontSize="32" fontWeight="700" fontFamily="ui-monospace,monospace"
-              fill={color}
-              stroke="rgba(3,7,18,0.9)" strokeWidth="5"
-              style={{ paintOrder: 'stroke fill' }}>{value}</text>
+              style={{ fill: color, stroke: 'var(--gauge-halo)', strokeWidth: 5, paintOrder: 'stroke fill' }}>
+              {value}
+            </text>
             <text x={CX} y={CY - 7} textAnchor="middle" dominantBaseline="middle"
-              fontSize="9.5" fill="#9ca3af" fontFamily="sans-serif"
-              stroke="rgba(3,7,18,0.9)" strokeWidth="3"
-              style={{ paintOrder: 'stroke fill' }}>
+              fontSize="9.5" fontFamily="sans-serif"
+              style={{ fill: 'var(--gauge-sub-color)', stroke: 'var(--gauge-halo)', strokeWidth: 3, paintOrder: 'stroke fill' }}>
               {SEMI_SEGS[activeSeg].label}
             </text>
           </>
         )}
 
+        {/* 틱 마크 — 20 / 40 / 60 / 80 */}
+        {!loading && [20, 40, 60, 80].map(v => {
+          const angle = (180 + (v / 100) * 180) * Math.PI / 180
+          const c = Math.cos(angle), s = Math.sin(angle)
+          return (
+            <line key={v}
+              x1={(CX + (R2 + 1) * c).toFixed(1)} y1={(CY + (R2 + 1) * s).toFixed(1)}
+              x2={(CX + (R2 + 5) * c).toFixed(1)} y2={(CY + (R2 + 5) * s).toFixed(1)}
+              style={{ stroke: 'var(--gauge-tick-dim)', strokeWidth: 1.2 }} />
+          )
+        })}
+
         {/* 베이스라인 */}
         <line x1={CX - R2 - 4} y1={CY} x2={CX + R2 + 4} y2={CY}
-          stroke="rgba(55,65,81,0.4)" strokeWidth="0.5" />
+          style={{ stroke: 'var(--gauge-baseline)', strokeWidth: 0.5 }} />
+
+        {/* 0 / 50 / 100 엔드 라벨 */}
+        {!loading && <>
+          <text x={CX - R2 - 1} y={CY + 7} textAnchor="middle" fontSize="7"
+            fontFamily="ui-monospace,monospace" style={{ fill: 'var(--gauge-edge-label)' }}>0</text>
+          <text x={CX} y={CY + 7} textAnchor="middle" fontSize="7"
+            fontFamily="ui-monospace,monospace" style={{ fill: 'var(--gauge-edge-label)' }}>50</text>
+          <text x={CX + R2 + 1} y={CY + 7} textAnchor="middle" fontSize="7"
+            fontFamily="ui-monospace,monospace" style={{ fill: 'var(--gauge-edge-label)' }}>100</text>
+        </>}
       </svg>
 
       <div className="flex justify-between px-4 -mt-2">
@@ -380,10 +400,10 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
     <div
       className="rounded-2xl p-4 space-y-4 overflow-hidden"
       style={{
-        background: 'rgba(5,10,20,0.78)',
+        background: 'var(--mtp-bg)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        border: '0.5px solid rgba(100,116,139,0.22)',
+        border: '0.5px solid var(--mtp-border)',
       }}
     >
       {/* ── 헤더 + 디지털 수치 ── */}
@@ -415,16 +435,16 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
 
       {/* ── 유리 수조 (Glass Tank) ── */}
       {loading ? (
-        <div className="h-[88px] rounded-xl animate-pulse" style={{ background: 'rgba(30,41,59,0.4)' }} />
+        <div className="h-[88px] rounded-xl animate-pulse" style={{ background: 'var(--mtp-skel-bg)' }} />
       ) : (
         <div
           className="relative h-[88px] rounded-xl overflow-hidden"
           style={{
-            border: '1px solid rgba(148,163,184,0.18)',
-            background: 'rgba(3,7,18,0.88)',
+            border: '1px solid var(--mtp-tank-border)',
+            background: 'var(--mtp-tank-bg)',
             backdropFilter: 'blur(14px)',
             WebkitBackdropFilter: 'blur(14px)',
-            boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.025)',
+            boxShadow: 'var(--mtp-tank-shadow)',
           }}
         >
           {/* 물 채우기 + 파도 */}
@@ -448,6 +468,14 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
               transition: 'box-shadow 0.8s',
             }}
           />
+
+          {/* 수위 스케일 — 우측 */}
+          <div className="absolute right-1 inset-y-0 flex flex-col justify-between py-0.5 pointer-events-none z-[3]">
+            {[100, 75, 50, 25, 0].map(v => (
+              <span key={v} className="text-[7px] font-mono leading-none"
+                style={{ color: 'var(--mtp-scale-color)' }}>{v}</span>
+            ))}
+          </div>
 
           {/* 구역 레이블 오버레이 */}
           <div className="absolute inset-0 flex">
@@ -507,7 +535,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
             <div
               key={i}
               className="rounded-xl px-2 py-2.5 space-y-1.5 animate-pulse"
-              style={{ background: 'rgba(30,41,59,0.4)', border: '0.5px solid rgba(71,85,105,0.2)' }}
+              style={{ background: 'var(--mtp-skel-bg)', border: '0.5px solid var(--mtp-idx-border)' }}
             >
               <Skel w="w-full" /><Skel w="w-2/3" />
             </div>
@@ -516,8 +544,8 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
           data.indices.map(idx => (
             <div
               key={idx.ticker}
-              className="rounded-xl px-2 py-2.5 space-y-1"
-              style={{ background: 'rgba(15,23,42,0.6)', border: '0.5px solid rgba(71,85,105,0.2)' }}
+              className="rounded-xl px-2 py-2.5 space-y-0.5"
+              style={{ background: 'var(--mtp-idx-bg)', border: '0.5px solid var(--mtp-idx-border)' }}
             >
               <p className="text-[11px] text-slate-500 font-medium truncate">{idx.name}</p>
               <div className={`flex items-center gap-0.5 text-sm font-bold mono ${idx.changePercent >= 0 ? 'text-rise' : 'text-fall'}`}>
@@ -530,6 +558,10 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
                 {idx.price >= 1000
                   ? idx.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
                   : idx.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              </p>
+              <p className="text-[9px] mono"
+                style={{ color: idx.changePercent >= 0 ? '#10b981' : '#f87171' }}>
+                {idx.change >= 0 ? '+' : ''}{idx.change.toFixed(2)}pts
               </p>
             </div>
           ))

@@ -295,7 +295,7 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
   return (
     <div className="card">
       <p className="text-sm font-semibold text-gray-200 mb-4">섹터 분포</p>
-      <div style={{ width: '100%', height: 180 }}>
+      <div style={{ width: '100%', height: 180, position: 'relative' }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={data} cx="50%" cy="50%" outerRadius={70} innerRadius={40}
@@ -309,6 +309,12 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
             <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}개 종목`, '']} />
           </PieChart>
         </ResponsiveContainer>
+        {activeIdx === undefined && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="text-base font-bold mono text-gray-200">{total}</span>
+            <span className="text-[10px] text-gray-500">종목</span>
+          </div>
+        )}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-2">
         {data.map((entry, i) => (
@@ -627,10 +633,10 @@ export default function Analytics({ userId }: { userId: string | null }) {
 
       {/* 자산 배분 차트 */}
       <div className="grid md:grid-cols-2 gap-4">
-        {/* 파이 차트 — 애니메이션 + 호버 확장 */}
+        {/* 파이 차트 — 자산 배분 */}
         <div className="card">
           <p className="text-sm font-semibold text-gray-200 mb-4">자산 배분</p>
-          <div style={{ width: '100%', height: 220 }}>
+          <div style={{ width: '100%', height: 220, position: 'relative' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -645,6 +651,12 @@ export default function Analytics({ userId }: { userId: string | null }) {
                 <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
               </PieChart>
             </ResponsiveContainer>
+            {pieData.length > 0 && pieActiveIdx === undefined && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-sm font-bold mono text-gray-200">{fmtMan(totalKrw)}</span>
+                <span className="text-[10px] text-gray-500">총 보유</span>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
             {pieData.map((entry, i) => {
@@ -655,7 +667,8 @@ export default function Analytics({ userId }: { userId: string | null }) {
                   onMouseLeave={() => setPieActiveIdx(undefined)}>
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
                   <span className="text-xs text-gray-400">{entry.name}</span>
-                  <span className="text-xs text-gray-600 mono">{pct}%</span>
+                  <span className="text-xs text-gray-500 mono">{pct}%</span>
+                  <span className="text-[10px] text-gray-700 mono">{fmtMan(entry.value)}</span>
                 </div>
               )
             })}
@@ -665,7 +678,7 @@ export default function Analytics({ userId }: { userId: string | null }) {
         {/* 시장별 분포 파이 차트 */}
         <div className="card">
           <p className="text-sm font-semibold text-gray-200 mb-4">시장별 분포</p>
-          <div style={{ width: '100%', height: 220 }}>
+          <div style={{ width: '100%', height: 220, position: 'relative' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -680,6 +693,12 @@ export default function Analytics({ userId }: { userId: string | null }) {
                 <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
               </PieChart>
             </ResponsiveContainer>
+            {pieData.length > 0 && barActiveIdx === undefined && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-base font-bold mono text-gray-200">{pieData.length}</span>
+                <span className="text-[10px] text-gray-500">시장</span>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
             {pieData.map((entry, i) => {
@@ -690,7 +709,8 @@ export default function Analytics({ userId }: { userId: string | null }) {
                   onMouseLeave={() => setBarActiveIdx(undefined)}>
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
                   <span className="text-xs text-gray-400">{entry.name}</span>
-                  <span className="text-xs text-gray-600 mono">{pct}%</span>
+                  <span className="text-xs text-gray-500 mono">{pct}%</span>
+                  <span className="text-[10px] text-gray-700 mono">{fmtMan(entry.value)}</span>
                 </div>
               )
             })}
