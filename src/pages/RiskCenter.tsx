@@ -891,7 +891,8 @@ export default function RiskCenter({ seed, userId }: { seed: SeedData; userId: s
         </div>
         <button onClick={loadData} disabled={spinning}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 text-sm font-medium transition-colors disabled:opacity-40">
-          <RefreshCw className={`w-4 h-4 ${spinning ? 'animate-spin' : ''}`} />새로고침
+          <RefreshCw className={`w-4 h-4 ${spinning ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">새로고침</span>
         </button>
       </div>
 

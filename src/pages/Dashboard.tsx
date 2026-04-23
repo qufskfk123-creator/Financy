@@ -374,7 +374,7 @@ function WaveLayer({ color, amplitude, speed }: { color: string; amplitude: numb
         zIndex: 2,
       }}
     >
-      <path ref={ref} fill={color} opacity="0.75" />
+      <path ref={ref} fill={color} opacity="0.2" />
     </svg>
   )
 }
@@ -442,7 +442,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
             animate={{ height: `${score}%` }}
             transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
             style={{
-              background: `linear-gradient(180deg, ${zone.gradFrom}12 0%, ${zone.gradTo}0a 100%)`,
+              background: `linear-gradient(180deg, ${zone.gradTo}1b 0%, ${zone.gradTo}2a 100%)`,
             }}
           >
             <WaveLayer color={zone.waveColor} amplitude={zone.waveAmp} speed={zone.waveSpeed} />
@@ -649,7 +649,7 @@ export default function Dashboard() {
                      disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <RefreshCw className={`w-4 h-4 ${spinning ? 'animate-spin' : ''}`} />
-          새로고침
+          <span className="hidden sm:inline">새로고침</span>
         </button>
       </div>
 
