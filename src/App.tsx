@@ -205,8 +205,8 @@ export default function App() {
 
   // 보호된 페이지 이동 — 로그인 필요 시 Auth 페이지로
   const handleNavigate = useCallback((page: Page) => {
-    if (page === 'portfolio' && !user) {
-      setAuthRedirectTo('portfolio')
+    if ((page === 'portfolio' || page === 'risk-center' || page === 'analytics') && !user) {
+      setAuthRedirectTo(page)
       setCurrentPage('auth')
       return
     }
