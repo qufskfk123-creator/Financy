@@ -127,9 +127,13 @@ const userName = user
   ? user.user_metadata?.username ?? user.email?.split('@')[0] ?? null
   : guestName   // 게스트는 localStorage('financy_guest_name')
 
-// 페이지 전환 — portfolio는 로그인 필수
+// 페이지 전환 — portfolio · risk-center · analytics는 로그인 필수
 const handleNavigate = (page: Page) => {
-  if (page === 'portfolio' && !user) { setCurrentPage('auth'); return }
+  if ((page === 'portfolio' || page === 'risk-center' || page === 'analytics') && !user) {
+    setAuthRedirectTo(page)
+    setCurrentPage('auth')
+    return
+  }
   setCurrentPage(page)
 }
 
@@ -174,12 +178,37 @@ export function avatarFromUserId(userId: string): { emoji: string; color: string
 // 클릭 감지: onTap(framer-motion) + didDragRef 이중 가드 (드래그 후 오발 방지)
 // 열기: openChat() → dragX→0, dragY→0, snappedLeft=false, isOpen=true
 
-// Supabase Realtime
-// - Presence 채널: 접속자 수 (onlineCount)
-// - INSERT 구독: 읽지 않은 메시지 카운트 (unreadCount, isOpen=false일 때만 증가)
+// ── 익명 채팅 ──────────────────────────────────────────────
+// 로그인 없이도 채팅 가능. 비로그인 사용자는 guest_session_id(UUID)로 식별
+// - guestSessionId: useMemo → localStorage('financy_guest_chat_id') 에서 로드/생성
+// - 로그인: messages.user_id = user.id, guest_session_id = null
+// - 비로그인: messages.user_id = null, guest_session_id = guestSessionId
+// - isOwn 판별: user ? user.id === msg.user_id : guestSessionId === msg.guest_session_id
 
-// 관리자: user.email === 'qufskfk123@gmail.com'
+// ── Supabase Realtime 채널 3개 ──────────────────────────────
+// 1. 'badge:messages'     — 항상 활성 (앱 시작~종료). INSERT 시 unreadCount++, todayCount++
+// 2. 'public:messages:chat' — isOpen=true 일 때만 활성. 메시지 목록 실시간 수신
+// 3. 'presence:financy-lobby' — Presence. onlineCount + onlineUsers(닉네임 배열) 관리
+//    → ch.track({ online_at, user_name }) / userNameRef로 닉네임 최신 유지(재연결 없음)
+// 4. 'app_settings:chat'  — app_settings UPDATE 구독. chatAnon 실시간 반영
+
+// ── 접속자 배지 & 닉네임 팝업 ──────────────────────────────
+// - 배지: 모든 사용자에게 표시 (N명 접속 중)
+// - 클릭 시 showUserList 토글 → onlineUsers 닉네임 드롭다운
+// - 외부 클릭 감지: userListRef + document mousedown 이벤트
+
+// ── Today 카운터 ─────────────────────────────────────────
+// - 채팅창 최하단 "today N" 표시
+// - 앱 시작 시 DB에서 오늘 0시 이후 메시지 수 조회
+// - 이후 badge 채널 INSERT마다 +1
+
+// ── 관리자 ────────────────────────────────────────────────
+// user.email === 'qufskfk123@gmail.com'
 // → 메시지 hover 시 × 버튼 표시, deleteMessage(id) 호출
+
+// ── 채팅 익명 모드 (chatAnon) ────────────────────────────
+// app_settings.chat_anon = true 이면 타인 닉네임 숨김
+// 관리자가 Settings에서 토글 → Realtime으로 전체 사용자 즉시 반영
 
 // 채팅창 투명도: animate={{ opacity: isOpen ? 1 : chatSettings.opacity }}
 // 배지: AnimatePresence spring(stiffness:650, damping:18)
@@ -272,6 +301,17 @@ const RESERVED = ['admin', 'administrator', 'root', ... '관리자', '운영자'
 // - chatEnabled 토글, badgeEnabled 토글(chat off시 비활성화)
 // - opacity 슬라이더 (min:10, max:100, step:5, accentColor:#6C63FF)
 
+// 관리자 전용 — 채팅 익명 모드 (userEmail === 'qufskfk123@gmail.com' 일 때만 표시)
+// - app_settings.chat_anon 을 Supabase에서 읽고 실시간 구독
+// - 토글 시 supabase.from('app_settings').update({ chat_anon: v }).eq('id', 1)
+// - Realtime UPDATE로 모든 접속자에 즉시 반영
+
+// Toggle 컴포넌트
+// - 트랙: w-10 h-[22px] rounded-full overflow-hidden
+// - 썸: absolute w-[16px] h-[16px] (rem 아닌 px 명시 — 16.5px 기본 폰트 보정)
+// - 위치: left-[3px](OFF) / left-[21px](ON)  ← translate-x 대신 left 사용
+//   (translate-x는 static position 기준이라 브라우저마다 오프셋 달라짐)
+
 // 저장: 로그인 → supabase.auth.updateUser({ data: { username, avatar_emoji } })
 //       게스트 → localStorage
 ```
@@ -288,6 +328,7 @@ const RESERVED = ['admin', 'administrator', 'root', ... '관리자', '운영자'
 | `financy_seed` | SeedData JSON { krw, usd } |
 | `financy_theme` | 'dark' \| 'light' |
 | `financy_guest_name` | 게스트 닉네임 |
+| `financy_guest_chat_id` | 게스트 채팅 세션 UUID (익명 메시지 소유 판별) |
 | `financy_avatar_emoji` | 이모지 아바타 문자열 ('' = 없음) |
 | `financy_avatar_color` | 파스텔 배경색 HEX |
 | `financy_chat_settings` | ChatSettings JSON |
@@ -304,7 +345,29 @@ const RESERVED = ['admin', 'administrator', 'root', ... '관리자', '운영자'
 | `ticker_cache` | 실시간 시세 캐시 (15분 TTL) |
 | `market_cache` | 시장 지표 캐시 (TTL 가변) |
 | `profiles` | 유저 채팅 설정 JSONB (id=user_id, settings=ChatSettings) |
-| `chat_messages` | 실시간 채팅 메시지 (Realtime 활성화) |
+| `messages` | 실시간 채팅 메시지 (Realtime 활성화) |
+| `app_settings` | 전역 앱 설정 단일 행 (id=1, chat_anon boolean) |
+
+### messages 스키마 (현재)
+```sql
+id               uuid PK
+user_id          uuid REFERENCES auth.users(id)  -- nullable (익명=NULL)
+guest_session_id text                             -- 익명 세션 식별자
+user_name        text NOT NULL
+content          text NOT NULL CHECK (char_length <= 500)
+created_at       timestamptz DEFAULT now()
+```
+- RLS: SELECT=모두, INSERT=로그인(uid=user_id) OR 익명(uid IS NULL AND user_id IS NULL)
+- DELETE=본인(user_id 기준) + 관리자 정책
+- INSERT 트리거: 최신 500개 초과 시 오래된 것 자동 삭제 (`trim_old_messages`)
+
+### app_settings 스키마
+```sql
+id        int PK DEFAULT 1  (단일 행 강제: CHECK id=1)
+chat_anon boolean NOT NULL DEFAULT false
+```
+- RLS: SELECT=모두, UPDATE=관리자(jwt email = qufskfk123@gmail.com)
+- Realtime 활성화 — 토글 즉시 전체 접속자 반영
 
 ---
 
@@ -377,9 +440,12 @@ const RESERVED = ['admin', 'administrator', 'root', ... '관리자', '운영자'
 5. **모바일 대응**: 하단 탭바(`md:hidden`), 메인 컨텐츠 `pb-20 md:pb-0`
 6. **라이트 모드**: `document.documentElement`에 `data-theme="light"` 속성으로 제어. inline style={{}}은 CSS 변수(var(--name))로만 테마 반응
 7. **FeedItem 타입**: `api/ticker-tape.ts`에 정의되나 `tsconfig.app.json`의 `include: ["src"]` 제약으로 `TickerTape.tsx`에서 로컬 재선언하여 사용
-8. **관리자 계정**: `qufskfk123@gmail.com` — 채팅 메시지 삭제 권한, 닉네임 예약어 우회
+8. **관리자 계정**: `qufskfk123@gmail.com` — 채팅 메시지 삭제, 닉네임 예약어 우회, chat_anon 토글
 9. **채팅 설정 debounce**: 슬라이더 변경은 500ms 후 Supabase 저장 (userIdRef 패턴으로 stale closure 방지)
 10. **Recharts 타입 우회**: `activeIndex`, `activeShape`, `cornerRadius` 등 런타임엔 작동하나 TS 타입에 없는 prop은 `{...({ prop: val } as object)}` 패턴으로 전달
+11. **Toggle 썸 위치**: `translate-x` 대신 `left` 사용 — 기본 폰트 16.5px로 인해 rem 기반 `w-4`가 16.5px로 렌더링되어 썸이 트랙 밖으로 나가는 문제 방지. 썸 크기는 `w-[16px] h-[16px]` 명시
+12. **익명 채팅 DB**: `messages.user_id` nullable, `guest_session_id` 컬럼 추가. Supabase 타입 자동생성과 불일치하므로 insert 시 `as never` 캐스팅 사용
+13. **보호 페이지**: `portfolio` + `risk-center` + `analytics` 모두 로그인 필수. `setAuthRedirectTo(page)` 로 로그인 후 원래 페이지로 자동 이동
 
 ---
 

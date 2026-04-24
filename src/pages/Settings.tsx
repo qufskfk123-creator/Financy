@@ -60,8 +60,8 @@ function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: b
                   ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
     >
       <span
-        className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-transform duration-200
-                    ${value ? 'translate-x-[21px]' : 'translate-x-[3px]'}`}
+        className={`absolute top-[3px] w-[16px] h-[16px] rounded-full bg-white transition-all duration-200
+                    ${value ? 'left-[21px]' : 'left-[3px]'}`}
       />
     </button>
   )
