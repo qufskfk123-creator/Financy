@@ -85,6 +85,7 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
   const [snappedLeft,  setSnappedLeft]  = useState(false)
   const [onlineCount,  setOnlineCount]  = useState(1)
   const [unreadCount,  setUnreadCount]  = useState(0)
+  const [chatAnon,     setChatAnon]     = useState(false)
 
   const bottomRef    = useRef<HTMLDivElement>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
@@ -151,6 +152,28 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
   const closeChat = useCallback(() => {
     setIsOpen(false)
     setUnreadCount(0)
+  }, [])
+
+  // ── app_settings 구독 — 관리자 익명 모드 실시간 반영 ────────────
+  useEffect(() => {
+    supabase.from('app_settings' as never)
+      .select('chat_anon')
+      .eq('id', 1)
+      .single()
+      .then(({ data, error }: { data: { chat_anon: boolean } | null; error: unknown }) => {
+        if (!error && data) setChatAnon(data.chat_anon)
+      })
+      .catch(() => {})
+
+    const ch = supabase
+      .channel('app_settings:chat')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'app_settings' },
+        (payload: { new: { chat_anon: boolean } }) => setChatAnon(payload.new.chat_anon)
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(ch) }
   }, [])
 
   // ── 배지용 상시 구독 — 채팅창 닫혀있어도 새 메시지 감지 ──────────
@@ -384,7 +407,7 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
                   </div>
 
                   <div className={`flex flex-col max-w-[72%] gap-0.5 ${isOwn ? 'items-end' : 'items-start'}`}>
-                    {!isOwn && (
+                    {!isOwn && !chatAnon && (
                       <span className="text-xs text-gray-500 ml-1">{msg.user_name}</span>
                     )}
 

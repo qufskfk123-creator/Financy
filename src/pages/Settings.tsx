@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Sun, Moon, Trash2, Info, Palette, LogIn, LogOut, Share2, Pencil, Check, X, MessageCircle, Bell, Eye } from 'lucide-react'
+import { Sun, Moon, Trash2, Info, Palette, LogIn, LogOut, Share2, Pencil, Check, X, MessageCircle, Bell, Eye, EyeOff, Shield } from 'lucide-react'
 import { useShare } from '../lib/useShare'
 import Toast from '../components/Toast'
 import EmojiAvatar, { AVATAR_EMOJIS, EMPTY_EMOJI } from '../components/EmojiAvatar'
@@ -182,7 +182,38 @@ export default function Settings({
   const [nameMsg,     setNameMsg]     = useState<{ ok: boolean; text: string } | null>(null)
   const [emojiOpen,   setEmojiOpen]   = useState(false)
   const [savingEmoji, setSavingEmoji] = useState(false)
+  const [chatAnon,    setChatAnon]    = useState(false)
   const emojiAnchorRef = useRef<HTMLDivElement>(null)
+
+  const isAdmin = userEmail === 'qufskfk123@gmail.com'
+
+  // 관리자: app_settings 로드 + 실시간 구독
+  useEffect(() => {
+    if (!isAdmin) return
+    supabase.from('app_settings' as never)
+      .select('chat_anon')
+      .eq('id', 1)
+      .single()
+      .then(({ data, error }: { data: { chat_anon: boolean } | null; error: unknown }) => {
+        if (!error && data) setChatAnon(data.chat_anon)
+      })
+      .catch(() => {})
+
+    const ch = supabase
+      .channel('app_settings:admin')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'app_settings' },
+        (payload: { new: { chat_anon: boolean } }) => setChatAnon(payload.new.chat_anon)
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(ch) }
+  }, [isAdmin])
+
+  const toggleChatAnon = useCallback(async (v: boolean) => {
+    setChatAnon(v)
+    await supabase.from('app_settings' as never).update({ chat_anon: v } as never).eq('id', 1)
+  }, [])
 
   const startEdit = () => { setNameInput(userName ?? ''); setNameMsg(null); setEditing(true) }
   const cancelEdit = () => { setEditing(false); setNameMsg(null) }
@@ -402,6 +433,28 @@ export default function Settings({
             />
           </div>
         </Row>
+
+        {/* 관리자 전용 — 채팅 익명 모드 */}
+        {isAdmin && (
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 space-y-2.5">
+            <div className="flex items-center gap-1.5">
+              <Shield className="w-3 h-3 text-amber-400" />
+              <p className="text-[10px] font-semibold text-amber-400/80 uppercase tracking-wide">관리자 전용</p>
+            </div>
+            <Row
+              label="채팅 익명 모드"
+              sub={chatAnon ? '모든 닉네임 숨김 중' : '닉네임 표시 중'}
+            >
+              <div className="flex items-center gap-2">
+                {chatAnon
+                  ? <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                  : <Eye    className="w-3.5 h-3.5 text-gray-400" />
+                }
+                <Toggle value={chatAnon} onChange={toggleChatAnon} />
+              </div>
+            </Row>
+          </div>
+        )}
 
         {/* 투명도 슬라이더 */}
         <div className={`space-y-2.5 transition-opacity ${chatSettings.chatEnabled ? '' : 'opacity-40 pointer-events-none'}`}>
