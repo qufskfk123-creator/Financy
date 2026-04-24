@@ -12,8 +12,8 @@
  *   · 뉴스         : RSS 파싱        → /api/market-news
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { motion, useAnimationFrame } from 'framer-motion'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { motion, useAnimationFrame, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw,
   TrendingUp,
@@ -26,6 +26,10 @@ import {
   Newspaper,
   AlertCircle,
   Waves,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react'
 
 // ── 타입 ───────────────────────────────────────────────────
@@ -74,6 +78,17 @@ interface MarketStatusData {
   error?:           string
 }
 
+interface EconEvent {
+  date:     string
+  country:  string
+  event:    string
+  currency: string
+  impact:   string
+  previous: string | null
+  estimate: string | null
+  actual:   string | null
+}
+
 // ── 순수 SVG 도넛 파이차트 ────────────────────────────────
 
 /** 수치 표시 색상 */
@@ -117,7 +132,7 @@ function semiArcPath(cx: number, cy: number, r1: number, r2: number, fromDeg: nu
 
 function FearGreedGauge({ value, loading }: { value: number; loading: boolean }) {
   const CX = 100, CY = 100
-  const R1 = 55, R2 = 82
+  const R1 = 62, R2 = 82
   const activeSeg = getActiveSeg(value)
   const color     = getZoneColor(value)
 
@@ -276,6 +291,260 @@ function ErrLine({ msg }: { msg: string }) {
 
 function Skel({ w = 'w-full' }: { w?: string }) {
   return <div className={`h-3.5 rounded bg-gray-800 animate-pulse ${w}`} />
+}
+
+// ── 경제 캘린더 ──────────────────────────────────────────
+
+const COUNTRY_FLAG: Record<string, string> = {
+  US: '🇺🇸', EU: '🇪🇺', JP: '🇯🇵', GB: '🇬🇧', CN: '🇨🇳', KR: '🇰🇷',
+  CA: '🇨🇦', AU: '🇦🇺', DE: '🇩🇪', FR: '🇫🇷', IT: '🇮🇹', CH: '🇨🇭',
+}
+
+function parseNum(s: string | null): number | null {
+  if (!s) return null
+  const n = parseFloat(s.replace(/[^\d.-]/g, ''))
+  return isNaN(n) ? null : n
+}
+
+const IMPACT_STYLE: Record<string, { label: string; text: string; bg: string; dot: string }> = {
+  High:   { label: '고', text: 'text-rose-400',   bg: 'bg-rose-500/15',   dot: 'bg-rose-400' },
+  Medium: { label: '중', text: 'text-amber-400',  bg: 'bg-amber-500/15',  dot: 'bg-amber-400' },
+  Low:    { label: '저', text: 'text-slate-500',  bg: 'bg-slate-700/40',  dot: 'bg-slate-500' },
+}
+
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+
+function EconCalendarView({ events, loading, error }: { events: EconEvent[]; loading: boolean; error?: string }) {
+  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const [viewDate, setViewDate] = useState(() => new Date())
+  const [selectedKey, setSelectedKey] = useState<string | null>(todayKey)
+
+  const eventsByDate = useMemo(() => {
+    const map: Record<string, EconEvent[]> = {}
+    for (const ev of events) {
+      const key = ev.date.slice(0, 10)
+      if (!map[key]) map[key] = []
+      map[key].push(ev)
+    }
+    return map
+  }, [events])
+
+  const year  = viewDate.getFullYear()
+  const month = viewDate.getMonth()
+
+  const cells = useMemo(() => {
+    const firstWd = new Date(year, month, 1).getDay()
+    const total   = new Date(year, month + 1, 0).getDate()
+    const arr: (number | null)[] = []
+    for (let i = 0; i < firstWd; i++) arr.push(null)
+    for (let d = 1; d <= total; d++) arr.push(d)
+    return arr
+  }, [year, month])
+
+  const selectedEvents = selectedKey ? (eventsByDate[selectedKey] ?? []) : []
+  const selectedLabel  = selectedKey
+    ? `${parseInt(selectedKey.slice(5, 7))}월 ${parseInt(selectedKey.slice(8, 10))}일`
+    : null
+
+  if (loading) return (
+    <div className="space-y-2.5">
+      <div className="flex justify-between items-center">
+        <Skel w="w-8 h-5" /><Skel w="w-20 h-4" /><Skel w="w-8 h-5" />
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: 35 }).map((_, i) => (
+          <div key={i} className="aspect-square rounded-md bg-gray-800 animate-pulse" />
+        ))}
+      </div>
+    </div>
+  )
+  if (error) return <ErrLine msg="경제 지표 조회 실패 — 잠시 후 재시도" />
+
+  return (
+    <div>
+      {/* ── 월 네비게이션 ── */}
+      <div className="flex items-center justify-between mb-2.5">
+        <button
+          onClick={() => setViewDate(d => new Date(d.getFullYear(), d.getMonth() - 1))}
+          className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-gray-800 text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        <span className="text-xs font-semibold text-slate-300 mono">
+          {year}년 {month + 1}월
+        </span>
+        <button
+          onClick={() => setViewDate(d => new Date(d.getFullYear(), d.getMonth() + 1))}
+          className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-gray-800 text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* ── 요일 헤더 ── */}
+      <div className="grid grid-cols-7 text-center mb-1">
+        {WEEKDAYS.map((d, i) => (
+          <span key={d} className={`text-[10px] font-medium ${i === 0 ? 'text-rose-500/60' : i === 6 ? 'text-blue-500/60' : 'text-slate-600'}`}>
+            {d}
+          </span>
+        ))}
+      </div>
+
+      {/* ── 날짜 그리드 ── */}
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {cells.map((day, i) => {
+          if (!day) return <div key={`e-${i}`} />
+          const dateKey   = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const dayEvents = eventsByDate[dateKey] ?? []
+          const isToday   = dateKey === todayKey
+          const isSel     = selectedKey === dateKey
+          const hasHigh   = dayEvents.some(e => e.impact === 'High')
+          const hasMed    = !hasHigh && dayEvents.some(e => e.impact === 'Medium')
+          const wd        = i % 7
+
+          return (
+            <button
+              key={dateKey}
+              onMouseEnter={() => { if (dayEvents.length > 0) setSelectedKey(dateKey) }}
+              onClick={() => setSelectedKey(k => k === dateKey ? null : dateKey)}
+              className={`
+                relative flex flex-col items-center justify-center gap-0.5
+                aspect-square rounded-lg text-[11px] font-medium
+                transition-colors
+                ${isSel ? 'bg-brand-600/25' : dayEvents.length > 0 ? 'hover:bg-gray-800/70 cursor-pointer' : 'cursor-default'}
+              `}
+            >
+              {/* 날짜 숫자 */}
+              <span className={[
+                wd === 0 ? 'text-rose-400/80' : wd === 6 ? 'text-blue-400/80' : 'text-slate-400',
+                isToday ? '!text-brand-400 font-bold' : '',
+                isSel   ? '!text-slate-100' : '',
+              ].join(' ')}>
+                {day}
+              </span>
+              {/* 임팩트 도트 */}
+              {dayEvents.length > 0 && (
+                <span className={`w-[5px] h-[5px] rounded-full flex-shrink-0 ${hasHigh ? 'bg-rose-400' : hasMed ? 'bg-amber-400' : 'bg-slate-500'}`} />
+              )}
+              {/* 이벤트 수 뱃지 (2개 이상) */}
+              {dayEvents.length > 1 && (
+                <span className="absolute top-0.5 right-0.5 text-[8px] text-slate-600 mono leading-none">
+                  {dayEvents.length}
+                </span>
+              )}
+              {/* 오늘 링 */}
+              {isToday && (
+                <span className="absolute inset-0 rounded-lg ring-1 ring-brand-500/40 pointer-events-none" />
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── 선택된 날 이벤트 ── */}
+      <AnimatePresence mode="wait">
+        {selectedKey && (
+          <motion.div
+            key={selectedKey}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18 }}
+            className="mt-3 border-t border-gray-800/60 pt-3"
+          >
+            <p className="text-[10px] text-slate-500 mb-2.5 font-medium">
+              {selectedLabel} 지표
+              {selectedEvents.length > 0 && (
+                <span className="ml-1.5 text-brand-400">{selectedEvents.length}건</span>
+              )}
+            </p>
+            {selectedEvents.length === 0
+              ? <p className="text-[11px] text-slate-600 text-center py-3">예정된 지표 없음</p>
+              : <EconCalendarList events={selectedEvents} loading={false} />
+            }
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function EconCalendarList({ events, loading, error }: { events: EconEvent[]; loading: boolean; error?: string }) {
+  if (loading) {
+    return <div className="space-y-3">{[0, 1, 2, 3].map(i => (
+      <div key={i} className="space-y-1.5">
+        <Skel w="w-2/3" />
+        <Skel w="w-full" />
+        <Skel w="w-1/2" />
+      </div>
+    ))}</div>
+  }
+  if (error) return <ErrLine msg="경제 지표 조회 실패 — 잠시 후 재시도" />
+  if (events.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 gap-2 text-slate-600">
+        <CalendarDays className="w-7 h-7 opacity-40" />
+        <p className="text-xs">오늘 예정된 주요 지표가 없습니다</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="divide-y divide-gray-800/60">
+      {events.map((ev, i) => {
+        const time    = ev.date.includes(' ') ? ev.date.split(' ')[1].slice(0, 5) : ''
+        const flag    = COUNTRY_FLAG[ev.country] ?? ev.country
+        const style   = IMPACT_STYLE[ev.impact] ?? IMPACT_STYLE.Low
+        const actNum  = parseNum(ev.actual)
+        const estNum  = parseNum(ev.estimate)
+        const beatMiss = actNum != null && estNum != null
+          ? actNum >= estNum ? 'beat' : 'miss'
+          : null
+
+        return (
+          <div key={i} className="py-2.5 first:pt-0 last:pb-0">
+            {/* 헤더 행: 임팩트 배지 + 국가·시간 */}
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${style.bg} ${style.text}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                {style.label}
+              </span>
+              <span className="text-[10px] text-slate-500">{flag} {ev.country}</span>
+              {time && <><span className="text-slate-700 text-[10px]">·</span><span className="text-[10px] text-slate-500 mono">{time} UTC</span></>}
+            </div>
+
+            {/* 이벤트명 + 실제값 */}
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs text-slate-200 leading-snug flex-1 min-w-0 break-keep">{ev.event}</p>
+              {ev.actual != null && (
+                <span className={`text-xs font-bold mono flex-shrink-0 ${beatMiss === 'beat' ? 'text-emerald-400' : beatMiss === 'miss' ? 'text-rose-400' : 'text-slate-300'}`}>
+                  {ev.actual}
+                  {beatMiss === 'beat' && <span className="text-[9px] ml-0.5">▲</span>}
+                  {beatMiss === 'miss' && <span className="text-[9px] ml-0.5">▼</span>}
+                </span>
+              )}
+            </div>
+
+            {/* 예측·이전값 */}
+            {(ev.estimate || ev.previous) && (
+              <div className="flex gap-3 mt-1">
+                {ev.estimate && (
+                  <span className="text-[10px] text-slate-600">
+                    예측 <span className="text-slate-400 mono">{ev.estimate}</span>
+                  </span>
+                )}
+                {ev.previous && (
+                  <span className="text-[10px] text-slate-600">
+                    이전 <span className="text-slate-400 mono">{ev.previous}</span>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // ── 유동성 항해 ───────────────────────────────────────────
@@ -471,7 +740,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
                   }}
                 >
                   <span
-                    className="text-[33px] leading-none select-none"
+                    className="text-[26px] md:text-[33px] leading-none select-none"
                     style={{
                       filter: isActive ? `drop-shadow(0 0 8px ${z.waveColor}) drop-shadow(0 0 16px ${z.waveColor})` : 'none',
                       transform: isActive ? 'scale(1.15)' : 'scale(1)',
@@ -479,7 +748,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
                     }}
                   >{z.emoji}</span>
                   <span
-                    className="text-[16px] font-bold leading-none"
+                    className="text-[13px] md:text-[16px] font-bold leading-none"
                     style={{
                       color: 'var(--mtp-zone-label)',
                       textShadow: isActive ? `0 0 10px ${z.glow}` : 'none',
@@ -488,7 +757,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
                   >{z.label}</span>
                   {isActive && (
                     <span
-                      className="text-[14px] font-bold mono leading-none"
+                      className="text-[12px] md:text-[14px] font-bold mono leading-none"
                       style={{
                         color: 'var(--mtp-zone-label)',
                       }}
@@ -504,7 +773,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
       {/* ── 구역 설명 ── */}
       {!loading && (
         <div className="space-y-2">
-          <p className="text-xs text-slate-400 leading-relaxed">{zone.desc}</p>
+          <p className="text-xs text-slate-400 leading-relaxed break-keep">{zone.desc}</p>
           <div className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: zone.gradFrom }}>
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: zone.gradFrom }} />
             {zone.action}
@@ -571,6 +840,8 @@ export default function Dashboard() {
   const [irx,     setIrx]     = useState<{ data: QuoteData | null; loading: boolean }>({ data: null, loading: true })
   const [news,    setNews]    = useState<{ items: NewsItem[]; loading: boolean; error?: string }>({ items: [], loading: true })
   const [liq,     setLiq]     = useState<{ data: MarketStatusData | null; loading: boolean }>({ data: null, loading: true })
+  const [cal,     setCal]     = useState<{ events: EconEvent[]; loading: boolean; error?: string }>({ events: [], loading: true })
+  const [calMobileOpen, setCalMobileOpen] = useState(false)
   const [spinning, setSpinning] = useState(false)
 
   const fetchAll = useCallback(() => {
@@ -609,6 +880,12 @@ export default function Dashboard() {
       .then(r => r.json())
       .then(d => setLiq({ data: d.error ? null : d, loading: false }))
       .catch(() => setLiq({ data: null, loading: false }))
+
+    setCal(p => ({ ...p, loading: true }))
+    fetch('/api/economic-calendar')
+      .then(r => r.json())
+      .then(d => setCal({ events: d.events ?? [], loading: false, error: d.error }))
+      .catch(e => setCal({ events: [], loading: false, error: e.message }))
 
     setTimeout(() => setSpinning(false), 1_200)
   }, [])
@@ -663,8 +940,11 @@ export default function Dashboard() {
         lg:grid lg:grid-cols-[340px_1fr] lg:gap-6
       ">
 
-        {/* ╔══ 좌: 게이지 카드 ══════════════════════════════╗ */}
-        <div className="card flex flex-col items-center lg:overflow-hidden">
+        {/* ╔══ 좌: 게이지 + 경제 캘린더 (데스크톱) ═══════════╗ */}
+        <div className="flex flex-col gap-4 lg:min-h-0 lg:overflow-hidden">
+
+        {/* 게이지 카드 */}
+        <div className="card flex flex-col items-center flex-shrink-0">
           {/* 카드 타이틀 */}
           <div className="flex items-center justify-between w-full mb-5">
             <div className="flex items-center gap-2">
@@ -710,6 +990,63 @@ export default function Dashboard() {
           </div>
 
           <p className="text-xs text-gray-700 mt-auto pt-4">Alternative.me · 1시간 캐시</p>
+        </div>
+
+        {/* 경제 캘린더 — 데스크톱 전용 */}
+        <div className="card hidden lg:flex lg:flex-col flex-1 min-h-0">
+          <div className="flex items-center justify-between mb-3 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-5 h-5 text-brand-400" />
+              <span className="text-base font-semibold text-slate-200 tracking-tight">경제 캘린더</span>
+            </div>
+            <span className="text-xs text-slate-500">FMP · 1h 캐시</span>
+          </div>
+          <div className="overflow-y-auto flex-1 min-h-0 pr-0.5">
+            <EconCalendarView events={cal.events} loading={cal.loading} error={cal.error} />
+          </div>
+        </div>
+
+        {/* 경제 캘린더 — 모바일 접힘 카드 (lg 미만) */}
+        <div className="card lg:hidden">
+          <button
+            onClick={() => setCalMobileOpen(o => !o)}
+            className="flex items-center justify-between w-full"
+          >
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-brand-400" />
+              <span className="text-sm font-semibold text-slate-200 tracking-tight">경제 캘린더</span>
+              {cal.events.length > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-brand-600/20 text-brand-400">
+                  {cal.events.length}건
+                </span>
+              )}
+            </div>
+            <motion.div
+              animate={{ rotate: calMobileOpen ? 180 : 0 }}
+              transition={{ duration: 0.22 }}
+            >
+              <ChevronDown className="w-4 h-4 text-slate-500" />
+            </motion.div>
+          </button>
+
+          <AnimatePresence initial={false}>
+            {calMobileOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+                className="overflow-hidden"
+              >
+                <div className="pt-4 border-t border-gray-800/50 mt-3">
+                  <EconCalendarView events={cal.events} loading={cal.loading} error={cal.error} />
+                </div>
+                <p className="text-[10px] text-gray-700 pt-3">FMP · 1시간 캐시</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         </div>
         {/* ╚══════════════════════════════════════════════════╝ */}
 
@@ -867,6 +1204,7 @@ export default function Dashboard() {
         {/* ╚══════════════════════════════════════════════════╝ */}
 
       </div>
+
     </div>
   )
 }

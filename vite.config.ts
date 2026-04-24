@@ -415,6 +415,45 @@ export default defineConfig(({ mode }) => {
     }
   }
 
+  // ── /api/economic-calendar ───────────────────────────────────
+  function devEconCalendarPlugin(): Plugin {
+    return {
+      name: 'dev-api-economic-calendar',
+      configureServer(server) {
+        server.middlewares.use('/api/economic-calendar', async (_req: IncomingMessage, res: ServerResponse) => {
+          res.setHeader('Content-Type', 'application/json')
+          const today = new Date().toISOString().slice(0, 10)
+          if (!FMP_KEY) {
+            res.writeHead(200); res.end(JSON.stringify({ events: [], date: today, error: 'No FMP key' })); return
+          }
+          try {
+            const url = `https://financialmodelingprep.com/api/v3/economic_calendar?from=${today}&to=${today}&apikey=${FMP_KEY}`
+            const r = await fetch(url, { signal: AbortSignal.timeout(8_000) })
+            if (!r.ok) throw new Error(`FMP ${r.status}`)
+            const raw: any[] = await r.json()
+            const IMPACT_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
+            const events = (Array.isArray(raw) ? raw : [])
+              .map((e: any) => ({
+                date: String(e.date ?? ''), country: String(e.country ?? ''),
+                event: String(e.event ?? ''), currency: String(e.currency ?? ''),
+                impact: String(e.impact ?? 'Low'),
+                previous: e.previous != null ? String(e.previous) : null,
+                estimate: e.estimate != null ? String(e.estimate) : null,
+                actual:   e.actual   != null ? String(e.actual)   : null,
+              }))
+              .sort((a: any, b: any) => {
+                const ia = IMPACT_ORDER[a.impact] ?? 2, ib = IMPACT_ORDER[b.impact] ?? 2
+                return ia !== ib ? ia - ib : a.date.localeCompare(b.date)
+              })
+            res.writeHead(200); res.end(JSON.stringify({ events, date: today }))
+          } catch (e) {
+            res.writeHead(200); res.end(JSON.stringify({ events: [], date: today, error: String(e) }))
+          }
+        })
+      },
+    }
+  }
+
   // ── /api/ticker-tape ─────────────────────────────────────────
   function devTickerTapePlugin(): Plugin {
     return {
@@ -465,6 +504,7 @@ export default defineConfig(({ mode }) => {
       devMarketNewsPlugin(),
       devFundamentalsPlugin(),
       devMarketStatusPlugin(),
+      devEconCalendarPlugin(),
       devTickerTapePlugin(),
     ],
     build: {
