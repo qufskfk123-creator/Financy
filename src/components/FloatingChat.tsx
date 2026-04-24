@@ -85,13 +85,17 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
   const [snappedLeft,  setSnappedLeft]  = useState(false)
   const [onlineCount,  setOnlineCount]  = useState(1)
   const [unreadCount,  setUnreadCount]  = useState(0)
-  const [chatAnon,     setChatAnon]     = useState(false)
-  const [todayCount,   setTodayCount]   = useState(0)
+  const [chatAnon,      setChatAnon]      = useState(false)
+  const [todayCount,    setTodayCount]    = useState(0)
+  const [onlineUsers,   setOnlineUsers]   = useState<string[]>([])
+  const [showUserList,  setShowUserList]  = useState(false)
 
   const bottomRef    = useRef<HTMLDivElement>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
+  const userListRef  = useRef<HTMLDivElement>(null)
   const channelRef   = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const presenceRef  = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const userNameRef  = useRef(userName)
   // 드래그 중인지 여부 — onTap이 드래그 후에 발화되지 않도록 보호
   const didDragRef   = useRef(false)
 
@@ -108,6 +112,20 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
     }
     return id
   }, [user])
+
+  // userName 변경 시 ref 동기화 (presence 재연결 없이 최신 닉네임 유지)
+  useEffect(() => { userNameRef.current = userName }, [userName])
+
+  // 접속자 목록 외부 클릭 시 닫기
+  useEffect(() => {
+    if (!showUserList) return
+    const handler = (e: MouseEvent) => {
+      if (userListRef.current && !userListRef.current.contains(e.target as Node))
+        setShowUserList(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showUserList])
 
   // ── 드래그 모션 값 (CSS 기준 위치에서의 오프셋) ────────────────
   const dragX = useMotionValue(0)
@@ -212,12 +230,17 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
     })
 
     ch.on('presence', { event: 'sync' }, () => {
-      const count = Object.keys(ch.presenceState()).length
-      setOnlineCount(Math.max(1, count))
+      const state = ch.presenceState<{ user_name: string }>()
+      const names = Object.values(state).map(p => p[0]?.user_name ?? '익명')
+      setOnlineCount(Math.max(1, names.length))
+      setOnlineUsers(names)
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await ch.track({ online_at: new Date().toISOString() })
+        await ch.track({
+          online_at: new Date().toISOString(),
+          user_name: userNameRef.current || '익명',
+        })
       }
     })
 
@@ -367,15 +390,46 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
             <span className={`text-sm font-semibold ${isLight ? 'text-gray-900' : 'text-white'}`}>
               실시간 채팅
             </span>
-            {/* 접속 인원 배지 — 관리자 전용 */}
-            {isAdmin && (
-              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25">
+            {/* 접속 인원 배지 — 클릭 시 닉네임 목록 팝업 */}
+            <div ref={userListRef} className="relative">
+              <button
+                onClick={() => setShowUserList(v => !v)}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full
+                           bg-emerald-500/15 border border-emerald-500/25
+                           hover:bg-emerald-500/25 transition-colors"
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
                 <span className="text-[10px] font-semibold text-emerald-400 tabular-nums">
                   {onlineCount}명 접속 중
                 </span>
-              </div>
-            )}
+              </button>
+
+              {showUserList && (
+                <div
+                  className="absolute top-full left-0 mt-1.5 z-20 min-w-[120px] max-h-[160px]
+                             overflow-y-auto rounded-xl py-1.5 shadow-xl"
+                  style={{
+                    background:   isLight ? 'rgba(255,255,255,0.96)' : 'rgba(18,18,40,0.96)',
+                    border:       isLight ? '1px solid rgba(91,85,204,0.18)' : '1px solid rgba(108,99,255,0.22)',
+                    backdropFilter: 'blur(16px)',
+                  }}
+                >
+                  {onlineUsers.length === 0 ? (
+                    <p className="text-[11px] text-gray-500 px-3 py-1">정보 없음</p>
+                  ) : (
+                    onlineUsers.map((name, i) => (
+                      <div key={i} className="flex items-center gap-1.5 px-3 py-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                        <span className={`text-[11px] truncate max-w-[100px]
+                          ${isLight ? 'text-gray-700' : 'text-gray-300'}`}>
+                          {name}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <button
             onClick={closeChat}
