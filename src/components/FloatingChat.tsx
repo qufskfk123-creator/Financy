@@ -86,6 +86,7 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
   const [onlineCount,  setOnlineCount]  = useState(1)
   const [unreadCount,  setUnreadCount]  = useState(0)
   const [chatAnon,     setChatAnon]     = useState(false)
+  const [todayCount,   setTodayCount]   = useState(0)
 
   const bottomRef    = useRef<HTMLDivElement>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
@@ -175,6 +176,16 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
     return () => { supabase.removeChannel(ch) }
   }, [])
 
+  // ── 오늘 메시지 수 초기 조회 ────────────────────────────────────
+  useEffect(() => {
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    void supabase.from('messages')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', todayStart.toISOString())
+      .then(({ count }) => { if (count !== null) setTodayCount(count) })
+  }, [])
+
   // ── 배지용 상시 구독 — 채팅창 닫혀있어도 새 메시지 감지 ──────────
   useEffect(() => {
     const ch = supabase
@@ -182,6 +193,7 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         () => {
+          setTodayCount(c => c + 1)
           setIsOpen(prev => {
             if (!prev) setUnreadCount(c => c + 1)
             return prev
@@ -355,13 +367,15 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
             <span className={`text-sm font-semibold ${isLight ? 'text-gray-900' : 'text-white'}`}>
               실시간 채팅
             </span>
-            {/* 접속 인원 배지 */}
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-              <span className="text-[10px] font-semibold text-emerald-400 tabular-nums">
-                {onlineCount}명 접속 중
-              </span>
-            </div>
+            {/* 접속 인원 배지 — 관리자 전용 */}
+            {isAdmin && (
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                <span className="text-[10px] font-semibold text-emerald-400 tabular-nums">
+                  {onlineCount}명 접속 중
+                </span>
+              </div>
+            )}
           </div>
           <button
             onClick={closeChat}
@@ -482,6 +496,14 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
               </svg>
             </button>
           </div>
+        </div>
+
+        {/* Today 카운터 */}
+        <div className="pb-2.5 flex items-center justify-center gap-1">
+          <span className="text-[10px] tabular-nums"
+            style={{ color: isLight ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.18)' }}>
+            today {todayCount.toLocaleString()}
+          </span>
         </div>
       </div>
 
