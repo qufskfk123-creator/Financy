@@ -190,14 +190,13 @@ export default function Settings({
   // 관리자: app_settings 로드 + 실시간 구독
   useEffect(() => {
     if (!isAdmin) return
-    supabase.from('app_settings' as never)
+    void supabase.from('app_settings' as never)
       .select('chat_anon')
       .eq('id', 1)
       .single()
       .then(({ data, error }: { data: { chat_anon: boolean } | null; error: unknown }) => {
         if (!error && data) setChatAnon(data.chat_anon)
       })
-      .catch(() => {})
 
     const ch = supabase
       .channel('app_settings:admin')

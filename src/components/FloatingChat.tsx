@@ -156,14 +156,13 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
 
   // ── app_settings 구독 — 관리자 익명 모드 실시간 반영 ────────────
   useEffect(() => {
-    supabase.from('app_settings' as never)
+    void supabase.from('app_settings' as never)
       .select('chat_anon')
       .eq('id', 1)
       .single()
       .then(({ data, error }: { data: { chat_anon: boolean } | null; error: unknown }) => {
         if (!error && data) setChatAnon(data.chat_anon)
       })
-      .catch(() => {})
 
     const ch = supabase
       .channel('app_settings:chat')
