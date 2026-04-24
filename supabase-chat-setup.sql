@@ -5,11 +5,12 @@
 
 -- 1. messages 테이블 생성
 CREATE TABLE IF NOT EXISTS messages (
-  id           uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id      uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  user_name    text NOT NULL,
-  content      text NOT NULL CHECK (char_length(content) <= 500),
-  created_at   timestamptz DEFAULT now() NOT NULL
+  id                uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id           uuid REFERENCES auth.users(id) ON DELETE CASCADE,  -- 익명은 NULL
+  guest_session_id  text,                                               -- 익명 세션 식별자
+  user_name         text NOT NULL,
+  content           text NOT NULL CHECK (char_length(content) <= 500),
+  created_at        timestamptz DEFAULT now() NOT NULL
 );
 
 -- 성능용 인덱스 (최신순 조회 최적화)
@@ -25,12 +26,15 @@ CREATE POLICY "messages_select_all"
   ON messages FOR SELECT
   USING (true);
 
--- 로그인 유저만 본인 user_id로 삽입 가능
-CREATE POLICY "messages_insert_own"
+-- 로그인 유저: 본인 user_id / 익명 유저: user_id=NULL 허용
+CREATE POLICY "messages_insert"
   ON messages FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (
+    (auth.uid() IS NOT NULL AND auth.uid() = user_id)
+    OR (auth.uid() IS NULL AND user_id IS NULL)
+  );
 
--- 본인 메시지만 삭제 가능
+-- 본인 메시지만 삭제 가능 (로그인 유저만)
 CREATE POLICY "messages_delete_own"
   ON messages FOR DELETE
   USING (auth.uid() = user_id);

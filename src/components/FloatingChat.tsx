@@ -53,7 +53,8 @@ import type { ChatSettings } from '../lib/chatSettings'
 
 interface ChatMessage {
   id: string
-  user_id: string
+  user_id: string | null
+  guest_session_id?: string | null
   user_name: string
   content: string
   created_at: string
@@ -93,8 +94,18 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
   const didDragRef   = useRef(false)
 
   const isLight = theme === 'light'
-  // 관리자 계정 — 모든 메시지 삭제 권한
   const isAdmin = user?.email === 'qufskfk123@gmail.com'
+
+  // 게스트 세션 ID — 로그인하지 않은 사용자의 메시지 소유 판별용
+  const guestSessionId = useMemo<string | null>(() => {
+    if (user) return null
+    let id = localStorage.getItem('financy_guest_chat_id')
+    if (!id) {
+      id = crypto.randomUUID()
+      localStorage.setItem('financy_guest_chat_id', id)
+    }
+    return id
+  }, [user])
 
   // ── 드래그 모션 값 (CSS 기준 위치에서의 오프셋) ────────────────
   const dragX = useMotionValue(0)
@@ -142,6 +153,23 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
     setUnreadCount(0)
   }, [])
 
+  // ── 배지용 상시 구독 — 채팅창 닫혀있어도 새 메시지 감지 ──────────
+  useEffect(() => {
+    const ch = supabase
+      .channel('badge:messages')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        () => {
+          setIsOpen(prev => {
+            if (!prev) setUnreadCount(c => c + 1)
+            return prev
+          })
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
   // ── Presence — 실시간 접속자 수 ────────────────────────────────
   useEffect(() => {
     const presenceKey = user?.id ?? `anon_${Math.random().toString(36).slice(2)}`
@@ -187,7 +215,7 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
       .order('created_at', { ascending: false })
       .limit(300)
       .then(({ data }) => {
-        setMessages(data ? [...data].reverse() : [])
+        setMessages(data ? ([...data].reverse() as ChatMessage[]) : [])
         setLoading(false)
         setTimeout(() => scrollToBottom('auto'), 60)
       })
@@ -198,11 +226,6 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           setMessages(prev => [...prev, payload.new as ChatMessage])
-          // 채팅창이 닫혀 있으면 읽지 않은 수 증가
-          setIsOpen(prev => {
-            if (!prev) setUnreadCount(c => c + 1)
-            return prev
-          })
         }
       )
       .subscribe()
@@ -227,17 +250,26 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
 
   const sendMessage = useCallback(async () => {
     const content = input.trim()
-    if (!content || !user || sending) return
+    if (!content || sending) return
     setSending(true)
     setInput('')
-    await supabase.from('messages').insert({
-      user_id:   user.id,
-      user_name: userName || user.email?.split('@')[0] || '익명',
-      content,
-    })
+    if (user) {
+      await supabase.from('messages').insert({
+        user_id:   user.id,
+        user_name: userName || user.email?.split('@')[0] || '익명',
+        content,
+      })
+    } else {
+      await (supabase.from('messages') as ReturnType<typeof supabase.from>).insert({
+        user_id:          null,
+        guest_session_id: guestSessionId,
+        user_name:        userName || '익명',
+        content,
+      } as never)
+    }
     setSending(false)
     inputRef.current?.focus()
-  }, [input, user, userName, sending])
+  }, [input, user, userName, sending, guestSessionId])
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
@@ -336,8 +368,11 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
             </div>
           ) : (
             messages.map((msg) => {
-              const isOwn       = user?.id === msg.user_id
-              const otherAvatar = avatarFromUserId(msg.user_id)
+              const isOwn = user
+                ? user.id === msg.user_id
+                : (guestSessionId !== null && guestSessionId === msg.guest_session_id)
+              const otherAvatarId = msg.user_id ?? msg.guest_session_id ?? 'unknown'
+              const otherAvatar = avatarFromUserId(otherAvatarId)
               const ownEmoji    = userAvatar || DEFAULT_EMOJI
               return (
                 <div key={msg.id} className={`group flex gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -398,41 +433,33 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
           className="px-3 pb-3 pt-2"
           style={{ borderTop: isLight ? '1px solid rgba(91,85,204,0.10)' : '1px solid rgba(108,99,255,0.10)' }}
         >
-          {user ? (
-            <div className="flex gap-2 items-center">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKey}
-                placeholder="메시지를 입력하세요…"
-                maxLength={500}
-                style={inputStyle}
-                onFocus={e => (e.currentTarget.style.borderColor = isLight ? 'rgba(91,85,204,0.35)' : 'rgba(108,99,255,0.35)')}
-                onBlur={e =>  (e.currentTarget.style.borderColor = isLight ? 'rgba(91,85,204,0.14)' : 'rgba(108,99,255,0.10)')}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={!input.trim() || sending}
-                aria-label="메시지 보내기"
-                className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center
-                  transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: 'linear-gradient(135deg, #6C63FF 0%, #8B84FF 100%)' }}
-              >
-                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
-                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-              </button>
-            </div>
-          ) : (
-            <p className="text-center text-xs text-gray-500 py-1.5">
-              채팅에 참여하려면{' '}
-              <span className="text-brand-400 font-medium">로그인</span>
-              이 필요해요
-            </p>
-          )}
+          <div className="flex gap-2 items-center">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder={user ? '메시지를 입력하세요…' : `익명으로 채팅 (${userName || '익명'})`}
+              maxLength={500}
+              style={inputStyle}
+              onFocus={e => (e.currentTarget.style.borderColor = isLight ? 'rgba(91,85,204,0.35)' : 'rgba(108,99,255,0.35)')}
+              onBlur={e =>  (e.currentTarget.style.borderColor = isLight ? 'rgba(91,85,204,0.14)' : 'rgba(108,99,255,0.10)')}
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!input.trim() || sending}
+              aria-label="메시지 보내기"
+              className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center
+                transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: 'linear-gradient(135deg, #6C63FF 0%, #8B84FF 100%)' }}
+            >
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
