@@ -95,7 +95,7 @@ export async function refreshFundamentals(tickers: string[]): Promise<Map<string
       pe_ratio:          f.pe_ratio,
       dividend_yield:    f.dividend_yield,
       beta:              f.beta,
-      sector:            f.sector,
+      ...(f.sector != null ? { sector: f.sector } : {}),
       target_price:      f.target_price,
       fundamentals_date: today,
       ...(f.current_price != null ? { price: f.current_price } : {}),

@@ -208,7 +208,7 @@ function ScoreGauge({ label, score, sub, icon: Icon }: {
     <div className="flex flex-col items-center gap-2">
       <div className="relative" style={{ width: 64, height: 64 }}>
         <svg width="64" height="64" viewBox="0 0 68 68" className="-rotate-90">
-          <circle cx="34" cy="34" r={R} fill="none" stroke="#1f2937" strokeWidth="7" />
+          <circle cx="34" cy="34" r={R} fill="none" strokeWidth="7" style={{ stroke: 'var(--gauge-track)' }} />
           <circle cx="34" cy="34" r={R} fill="none" strokeWidth="7" strokeLinecap="round"
             className={`${rc.ring} transition-all duration-700`}
             strokeDasharray={`${CIRC * Math.max(0, score) / 100} ${CIRC}`} />
@@ -236,7 +236,7 @@ function DefenseScoreDashboard({ scores, hasSeed }: { scores: DefenseScores; has
   const rc = riskColor(overall)
 
   return (
-    <div className={`card border ${rc.border} ${rc.bg} space-y-4`}>
+    <div className={`card border ${rc.border} space-y-4`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldAlert className={`w-4 h-4 ${rc.text}`} />
@@ -385,7 +385,7 @@ function SvgDonut({ slices, total }: { slices: DonutSlice[]; total: number }) {
         angle += deg
         return <path key={i} d={path} fill={slice.color} style={{ transition: 'opacity 0.4s' }} />
       })}
-      <circle cx={CX} cy={CY} r={R1 - 1} fill="rgba(3,7,18,0.9)" />
+      <circle cx={CX} cy={CY} r={R1 - 1} style={{ fill: 'var(--gauge-panel-fill)' }} />
     </svg>
   )
 }
@@ -670,7 +670,7 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-blue-500/8 border border-blue-500/20 px-4 py-3 space-y-2">
+        <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
           <div className="flex items-center gap-1.5">
             <span className="text-sm">🇰🇷</span>
             <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">원화 (KRW)</span>
@@ -708,7 +708,7 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
           )}
         </div>
 
-        <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/20 px-4 py-3 space-y-2">
+        <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
           <div className="flex items-center gap-1.5">
             <span className="text-sm">🇺🇸</span>
             <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">달러 (USD)</span>
@@ -799,7 +799,7 @@ function RiskScoreCard({ assets }: { assets: Asset[] }) {
   const R = 48, CIRC = 2 * Math.PI * R
 
   return (
-    <div className={`card border ${rc.border} ${rc.bg} space-y-4`}>
+    <div className={`card border ${rc.border} space-y-4`}>
       <div className="flex items-center gap-2">
         <ShieldAlert className={`w-4 h-4 ${rc.text}`} />
         <span className="text-sm font-semibold text-gray-200">시장 연동 리스크 지수</span>
@@ -808,7 +808,7 @@ function RiskScoreCard({ assets }: { assets: Asset[] }) {
       <div className="flex items-center gap-5">
         <div className="relative flex-shrink-0" style={{ width: 100, height: 100 }}>
           <svg width="100" height="100" viewBox="0 0 120 120" className="-rotate-90">
-            <circle cx="60" cy="60" r={R} fill="none" stroke="#1f2937" strokeWidth="12" />
+            <circle cx="60" cy="60" r={R} fill="none" strokeWidth="12" style={{ stroke: 'var(--gauge-track)' }} />
             {!loading && <circle cx="60" cy="60" r={R} fill="none" strokeWidth="12" strokeLinecap="round"
               className={`${rc.ring} transition-all duration-700`}
               strokeDasharray={`${CIRC * riskScore / 100} ${CIRC}`} />}

@@ -25,7 +25,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { id: 'dashboard',    label: '기상도',     icon: LayoutDashboard },
+  { id: 'dashboard',    label: '투자 날씨',   icon: LayoutDashboard },
   { id: 'portfolio',    label: '포트폴리오',  icon: PieChart },
   { id: 'risk-center',  label: '리스크 센터', icon: ShieldAlert },
   { id: 'analytics',    label: '분석',        icon: BarChart3 },
@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
 ]
 
 const bottomNavItems: NavItem[] = [
-  { id: 'dashboard',    label: '기상도',    icon: LayoutDashboard },
+  { id: 'dashboard',    label: '투자 날씨',  icon: LayoutDashboard },
   { id: 'portfolio',    label: '포트폴리오', icon: PieChart },
   { id: 'risk-center',  label: '리스크',    icon: ShieldAlert },
   { id: 'analytics',    label: '분석',      icon: BarChart3 },

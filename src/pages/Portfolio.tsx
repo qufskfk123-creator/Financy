@@ -31,6 +31,8 @@ import {
   ArrowDownLeft,
   Search,
   Loader2,
+  Pencil,
+  Check,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────
@@ -38,10 +40,11 @@ import {
 export type MarketType = 'K-Stock' | 'U-Stock' | 'Crypto' | 'Cash'
 
 export interface BuyEntry {
-  id:       string
-  quantity: number
-  price:    number
-  date:     string
+  id:          string
+  quantity:    number
+  price:       number
+  date:        string
+  totalAmount?: number  // 증권사 표시 금액이 자동계산과 다를 때 직접 지정
 }
 
 export interface SellEntry {
@@ -62,6 +65,11 @@ export interface Asset {
 
 // ── Computed helpers ───────────────────────────────────────
 
+/** 소수점 둘째 자리 반올림 (부동소수점 오차 방지) */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
 /** 전체 매수 수량 */
 function totalBuyQty(asset: Asset): number {
   return asset.entries.reduce((s, e) => s + e.quantity, 0)
@@ -77,9 +85,9 @@ function holdingQty(asset: Asset): number {
   return totalBuyQty(asset) - totalSellQty(asset)
 }
 
-/** 총 매수 금액 */
+/** 총 매수 금액 — 각 체결의 수량×단가를 2자리 반올림 후 합산 (증권사 방식) */
 function totalInvested(asset: Asset): number {
-  return asset.entries.reduce((s, e) => s + e.quantity * e.price, 0)
+  return asset.entries.reduce((s, e) => s + (e.totalAmount ?? round2(e.quantity * e.price)), 0)
 }
 
 /** 보유 평단가 (가중평균, 매도해도 불변) */
@@ -88,9 +96,9 @@ function avgBuyPrice(asset: Asset): number {
   return qty > 0 ? totalInvested(asset) / qty : 0
 }
 
-/** 현재 보유 금액 (보유수량 × 보유평단) */
+/** 현재 보유 금액 (보유수량 × 보유평단, 2자리 반올림) */
 function holdingCost(asset: Asset): number {
-  return holdingQty(asset) * avgBuyPrice(asset)
+  return round2(holdingQty(asset) * avgBuyPrice(asset))
 }
 
 /** 개별 매도 1건의 실현손익 */
@@ -109,12 +117,13 @@ function totalRealizedPL(asset: Asset): number {
 }
 
 /** 추가매수 후 예상 평단가 */
-function previewBuy(asset: Asset, addQty: number, addPrice: number) {
+function previewBuy(asset: Asset, addQty: number, addPrice: number, addTotalAmount?: number) {
   const curQty  = totalBuyQty(asset)
   const curCost = totalInvested(asset)
   const curAvg  = avgBuyPrice(asset)
   const newQty  = curQty + addQty
-  const newCost = curCost + addQty * addPrice
+  const addCost = addTotalAmount ?? round2(addQty * addPrice)
+  const newCost = curCost + addCost
   const newAvg  = newQty > 0 ? newCost / newQty : 0
   const delta   = newAvg - curAvg
   const pct     = curAvg > 0 ? (delta / curAvg) * 100 : 0
@@ -513,13 +522,14 @@ const MARKET_TYPES: MarketType[] = ['K-Stock', 'U-Stock', 'Crypto', 'Cash']
 type SearchResult = { ticker: string; name: string; exchange: string; type: string }
 
 function AddAssetForm({ onAdd, onClose }: {
-  onAdd:   (name: string, market: MarketType, quantity: number, price: number, ticker?: string) => void
+  onAdd:   (name: string, market: MarketType, quantity: number, price: number, ticker?: string, totalAmount?: number) => void
   onClose: () => void
 }) {
   const [name, setName]           = useState('')
-  const [ticker, setTicker]       = useState('')          // resolved ticker from search
+  const [ticker, setTicker]       = useState('')
   const [qty, setQty]             = useState('')
   const [price, setPrice]         = useState('')
+  const [totalDirect, setTotalDirect] = useState('')
   const [market, setMarket]       = useState<MarketType>('K-Stock')
   const [err, setErr]             = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
@@ -529,7 +539,10 @@ function AddAssetForm({ onAdd, onClose }: {
 
   const cfg = MARKET_CONFIG[market]
   const q = parseFloat(qty), p = parseFloat(price)
-  const total = !isNaN(q) && !isNaN(p) && q > 0 && p > 0 ? q * p : null
+  const autoTotal = !isNaN(q) && !isNaN(p) && q > 0 && p > 0 ? round2(q * p) : null
+  const totalDirectNum = parseFloat(totalDirect)
+  const hasOverride = totalDirect !== '' && !isNaN(totalDirectNum) && totalDirectNum !== autoTotal
+  const effectiveTotal = hasOverride ? totalDirectNum : autoTotal
   const hasSearch = market !== 'Cash'
 
   const handleNameChange = (val: string) => {
@@ -561,6 +574,7 @@ function AddAssetForm({ onAdd, onClose }: {
     setMarket(m)
     setName('')
     setTicker('')
+    setTotalDirect('')
     setSearchResults([])
     setShowDropdown(false)
   }
@@ -570,7 +584,7 @@ function AddAssetForm({ onAdd, onClose }: {
     if (!name.trim())       return setErr('종목명을 입력해주세요.')
     if (isNaN(q) || q <= 0) return setErr('수량은 0보다 큰 숫자를 입력해주세요.')
     if (isNaN(p) || p <= 0) return setErr('매수가는 0보다 큰 숫자를 입력해주세요.')
-    onAdd(name.trim(), market, q, p, ticker || undefined)
+    onAdd(name.trim(), market, q, p, ticker || undefined, hasOverride ? totalDirectNum : undefined)
     onClose()
   }
 
@@ -623,7 +637,7 @@ function AddAssetForm({ onAdd, onClose }: {
             </div>
             {/* 검색 드롭다운 */}
             {showDropdown && searchResults.length > 0 && (
-              <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+              <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-y-auto max-h-[200px]">
                 {searchResults.map(result => (
                   <button key={result.ticker} type="button" onMouseDown={() => selectResult(result)}
                     className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-800 text-left transition-colors">
@@ -661,10 +675,38 @@ function AddAssetForm({ onAdd, onClose }: {
               </div>
             </div>
           </div>
-          {total !== null && (
-            <div className="flex items-center justify-between bg-gray-800/70 rounded-xl px-4 py-2.5">
-              <span className="text-xs text-gray-500">총 투자금액</span>
-              <span className="text-sm font-bold text-gray-200 mono">{fmtMoney(total, cfg.currency)}</span>
+          {autoTotal !== null && (
+            <div className="space-y-2 bg-gray-800/70 rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-500">총 투자금액</span>
+                  {hasOverride && (
+                    <span className="text-[10px] bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded-md">수동입력</span>
+                  )}
+                </div>
+                <span className={`text-sm font-bold mono ${hasOverride ? 'text-amber-300' : 'text-gray-200'}`}>
+                  {fmtMoney(effectiveTotal ?? 0, cfg.currency)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-600 flex-shrink-0 whitespace-nowrap">증권사 금액 다를 경우</span>
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-gray-500 pointer-events-none">
+                    {cfg.currency === 'KRW' ? '₩' : '$'}
+                  </span>
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={totalDirect}
+                    onChange={e => setTotalDirect(e.target.value)}
+                    placeholder={autoTotal ? String(autoTotal) : ''}
+                    className="w-full bg-gray-700/50 border border-gray-600/60 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/15 rounded-lg pl-6 pr-6 py-1 text-xs text-gray-200 placeholder:text-gray-700 outline-none transition-colors mono"
+                  />
+                  {totalDirect !== '' && (
+                    <button type="button" onClick={() => setTotalDirect('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm leading-none">×</button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
           {err && <div className="flex items-center gap-1.5 text-xs text-rose-400"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />{err}</div>}
@@ -679,7 +721,7 @@ function AddAssetForm({ onAdd, onClose }: {
 
 function AddMoreForm({ asset, onConfirm, onCancel }: {
   asset:     Asset
-  onConfirm: (qty: number, price: number) => void
+  onConfirm: (qty: number, price: number, totalAmount?: number) => void
   onCancel:  () => void
 }) {
   const [qty, setQty]     = useState('')
@@ -887,17 +929,39 @@ function SellForm({ asset, onConfirm, onCancel }: {
 
 type InlineMode = 'none' | 'buy' | 'sell'
 
-function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry, onDeleteSell }: {
+function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry, onDeleteSell, onEditEntry }: {
   asset:          Asset
   onDeleteAsset:  (id: string) => void
-  onAddEntry:     (assetId: string, qty: number, price: number) => void
+  onAddEntry:     (assetId: string, qty: number, price: number, totalAmount?: number) => void
   onAddSell:      (assetId: string, qty: number, price: number) => void
   onDeleteEntry:  (assetId: string, entryId: string) => void
   onDeleteSell:   (assetId: string, sellId: string) => void
+  onEditEntry:    (assetId: string, entryId: string, qty: number, price: number, totalAmount?: number) => void
 }) {
-  const [expanded, setExpanded]     = useState(false)
-  const [mode, setMode]             = useState<InlineMode>('none')
-  const detailRef                   = useRef<HTMLDivElement>(null)
+  const [expanded, setExpanded]       = useState(false)
+  const [mode, setMode]               = useState<InlineMode>('none')
+  const [editEntryId, setEditEntryId] = useState<string | null>(null)
+  const [editQty, setEditQty]         = useState('')
+  const [editPrice, setEditPrice]     = useState('')
+  const [editTotal, setEditTotal]     = useState('')
+  const detailRef                     = useRef<HTMLDivElement>(null)
+
+  const startEdit = (e: BuyEntry) => {
+    setEditEntryId(e.id)
+    setEditQty(String(e.quantity))
+    setEditPrice(String(e.price))
+    setEditTotal(e.totalAmount !== undefined ? String(e.totalAmount) : '')
+  }
+  const cancelEdit = () => setEditEntryId(null)
+  const confirmEdit = () => {
+    if (!editEntryId) return
+    const q = parseFloat(editQty), p = parseFloat(editPrice)
+    if (isNaN(q) || q <= 0 || isNaN(p) || p <= 0) return
+    const tNum = parseFloat(editTotal)
+    const hasOverride = editTotal !== '' && !isNaN(tNum)
+    onEditEntry(asset.id, editEntryId, q, p, hasOverride ? tNum : undefined)
+    setEditEntryId(null)
+  }
 
   const cfg      = MARKET_CONFIG[asset.market]
   const currency = cfg.currency
@@ -978,7 +1042,7 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="text-right hidden sm:block">
             <p className="text-sm font-semibold text-gray-200 mono">{fmtMoney(hCost, currency)}</p>
-            <p className="text-[10px] text-gray-600">보유금액</p>
+            <p className="text-[10px] text-gray-600">투입금액</p>
           </div>
           {/* 화살표 — 클릭 이벤트는 부모 div가 처리 */}
           <div className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500">
@@ -1001,9 +1065,9 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
         </div>
       </div>
 
-      {/* 모바일 보유금액 */}
+      {/* 모바일 투입금액 */}
       <div className="sm:hidden px-4 pb-2.5 flex items-center justify-between">
-        <span className="text-xs text-gray-600">보유금액</span>
+        <span className="text-xs text-gray-600">투입금액</span>
         <span className="text-sm font-semibold text-gray-200 mono">{fmtMoney(hCost, currency)}</span>
       </div>
 
@@ -1020,19 +1084,74 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
               ))}
             </div>
             {asset.entries.map((e, idx) => (
-              <div key={e.id} className="grid grid-cols-[1.2fr_1fr_1fr_1.2fr_auto] gap-2 items-center py-1.5 rounded-lg hover:bg-gray-800/50 px-1 -mx-1 group transition-colors">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-gray-700 font-bold w-4 flex-shrink-0">{idx + 1}</span>
-                  <span className="text-xs text-gray-500">{fmtDate(e.date)}</span>
+              editEntryId === e.id ? (
+                <div key={e.id} className="py-2 px-2 -mx-1 rounded-lg bg-brand-500/8 border border-brand-500/20 space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-700 font-bold w-4 flex-shrink-0">{idx + 1}</span>
+                    <span className="text-[10px] text-gray-500">{fmtDate(e.date)}</span>
+                    <span className="text-[10px] text-brand-400 ml-auto">수정 중</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] text-gray-600 mb-0.5">수량</p>
+                      <input type="number" min="0" step="any" value={editQty}
+                        onChange={ev => setEditQty(ev.target.value)}
+                        onKeyDown={ev => { if (ev.key === 'Enter') confirmEdit(); if (ev.key === 'Escape') cancelEdit() }}
+                        className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 rounded-lg px-2 py-1 text-xs text-gray-200 outline-none mono"
+                        autoFocus />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] text-gray-600 mb-0.5">단가 ({currency})</p>
+                      <input type="number" min="0" step="any" value={editPrice}
+                        onChange={ev => setEditPrice(ev.target.value)}
+                        onKeyDown={ev => { if (ev.key === 'Enter') confirmEdit(); if (ev.key === 'Escape') cancelEdit() }}
+                        className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 rounded-lg px-2 py-1 text-xs text-gray-200 outline-none mono" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] text-gray-600 mb-0.5">소계 ({currency})</p>
+                      <input type="number" min="0" step="any" value={editTotal}
+                        onChange={ev => setEditTotal(ev.target.value)}
+                        onKeyDown={ev => { if (ev.key === 'Enter') confirmEdit(); if (ev.key === 'Escape') cancelEdit() }}
+                        placeholder={
+                          !isNaN(parseFloat(editQty)) && !isNaN(parseFloat(editPrice))
+                            ? String(round2(parseFloat(editQty) * parseFloat(editPrice)))
+                            : '자동'
+                        }
+                        className="w-full bg-gray-800 border border-gray-700 focus:border-amber-500 rounded-lg px-2 py-1 text-xs text-amber-200 outline-none mono placeholder:text-gray-700" />
+                    </div>
+                    <div className="flex items-end gap-1 pb-0.5 flex-shrink-0">
+                      <button onClick={confirmEdit}
+                        className="w-6 h-6 rounded flex items-center justify-center bg-brand-600/20 text-brand-400 hover:bg-brand-600/40 transition-colors">
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={cancelEdit}
+                        className="w-6 h-6 rounded flex items-center justify-center bg-gray-800 text-gray-500 hover:text-gray-300 transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <span className="text-xs text-gray-300 mono">{fmtQty(e.quantity, asset.market)}</span>
-                <span className="text-xs text-gray-400 mono">{fmtMoney(e.price, currency)}</span>
-                <span className="text-xs text-gray-300 mono">{fmtMoney(e.quantity * e.price, currency)}</span>
-                <button onClick={() => handleDeleteEntry(e.id)}
-                  className="w-5 h-5 rounded flex items-center justify-center text-gray-700 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
+              ) : (
+                <div key={e.id} className="grid grid-cols-[1.2fr_1fr_1fr_1.2fr_auto] gap-2 items-center py-1.5 rounded-lg hover:bg-gray-800/50 px-1 -mx-1 group transition-colors">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-700 font-bold w-4 flex-shrink-0">{idx + 1}</span>
+                    <span className="text-xs text-gray-500">{fmtDate(e.date)}</span>
+                  </div>
+                  <span className="text-xs text-gray-300 mono">{fmtQty(e.quantity, asset.market)}</span>
+                  <span className="text-xs text-gray-400 mono">{fmtMoney(e.price, currency)}</span>
+                  <span className="text-xs text-gray-300 mono">{fmtMoney(e.totalAmount ?? round2(e.quantity * e.price), currency)}</span>
+                  <div className="flex items-center gap-0.5">
+                    <button onClick={ev => { ev.stopPropagation(); startEdit(e) }}
+                      className="w-5 h-5 rounded flex items-center justify-center text-gray-700 hover:text-brand-400 hover:bg-brand-500/10 opacity-0 group-hover:opacity-100 transition-all">
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => handleDeleteEntry(e.id)}
+                      className="w-5 h-5 rounded flex items-center justify-center text-gray-700 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              )
             ))}
             {/* 매수 합계 */}
             <div className="grid grid-cols-[1.2fr_1fr_1fr_1.2fr_auto] gap-2 items-center pt-2 mt-0.5 border-t border-gray-800">
@@ -1112,7 +1231,7 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
                 <p className="text-sm font-bold text-gray-200 mono">{fmtMoney(avg, currency)}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-600 mb-0.5">보유 금액</p>
+                <p className="text-[10px] text-gray-600 mb-0.5">투입 금액</p>
                 <p className="text-sm font-bold text-gray-200 mono">{fmtMoney(hCost, currency)}</p>
               </div>
             </div>
@@ -1138,7 +1257,7 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
           {mode === 'buy' && (
             <AddMoreForm
               asset={asset}
-              onConfirm={(q, p) => { onAddEntry(asset.id, q, p); setMode('none') }}
+              onConfirm={(q, p, t) => { onAddEntry(asset.id, q, p, t); setMode('none') }}
               onCancel={() => setMode('none')}
             />
           )}
@@ -1182,17 +1301,13 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
       setDbLoading(true)
       fetchAssets(userId)
         .then(data => {
-          setAssets(data)
-          // 로컬에 데이터가 있고 DB가 비었으면 마이그레이션 안내
-          try {
-            const raw = localStorage.getItem('financy_assets')
-            if (raw) {
-              const local: any[] = JSON.parse(raw)
-              if (local.length > 0 && data.length === 0) setMigrationPrompt(true)
-            }
-          } catch {}
+          const localAssets = loadAssets()
+          // DB는 qty/avg_price만 저장 (entries/sells/totalAmount 미지원)
+          // localStorage에 상세 데이터가 있으면 그것을 우선 사용
+          if (localAssets.length === 0) setAssets(data)
+          if (localAssets.length > 0 && data.length === 0) setMigrationPrompt(true)
         })
-        .catch(() => setAssets(loadAssets()))   // 실패 시 localStorage fallback
+        .catch(() => {})
         .finally(() => setDbLoading(false))
     } else {
       setAssets(loadAssets())
@@ -1206,18 +1321,21 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
 
   // ── CRUD ────────────────────────────────────────────────────
 
-  const handleAdd = useCallback((name: string, market: MarketType, quantity: number, price: number, ticker?: string) => {
+  const handleAdd = useCallback((name: string, market: MarketType, quantity: number, price: number, ticker?: string, totalAmount?: number) => {
     const now = new Date().toISOString()
+    const entry: BuyEntry = totalAmount !== undefined
+      ? { id: genId(), quantity, price, date: now, totalAmount }
+      : { id: genId(), quantity, price, date: now }
     const newAsset: Asset = {
       id: ticker || genId(), name, market, createdAt: now, sells: [],
-      entries: [{ id: genId(), quantity, price, date: now }],
+      entries: [entry],
     }
     setAssets(prev => [...prev, newAsset])
     if (userId) upsertAsset(userId, newAsset).catch(e => { console.error(e); setDbSaveErr(true) })
     onTransaction?.({
       type: 'buy', name, market,
       currency: MARKET_CONFIG[market].currency,
-      quantity, price, amount: quantity * price,
+      quantity, price, amount: totalAmount ?? round2(quantity * price),
     })
   }, [userId, onTransaction])
 
@@ -1230,8 +1348,10 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
     }
   }, [userId])
 
-  const handleAddEntry = useCallback((assetId: string, qty: number, price: number) => {
-    const newEntry = { id: genId(), quantity: qty, price, date: new Date().toISOString() }
+  const handleAddEntry = useCallback((assetId: string, qty: number, price: number, totalAmount?: number) => {
+    const newEntry: BuyEntry = totalAmount !== undefined
+      ? { id: genId(), quantity: qty, price, date: new Date().toISOString(), totalAmount }
+      : { id: genId(), quantity: qty, price, date: new Date().toISOString() }
     setAssets(prev => prev.map(a => a.id !== assetId ? a : {
       ...a, entries: [...a.entries, newEntry],
     }))
@@ -1241,7 +1361,7 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
       onTransaction?.({
         type: 'buy', name: asset.name, market: asset.market,
         currency: MARKET_CONFIG[asset.market].currency,
-        quantity: qty, price, amount: qty * price,
+        quantity: qty, price, amount: totalAmount ?? round2(qty * price),
       })
     }
   }, [userId, onTransaction])
@@ -1275,6 +1395,21 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
     if (userId) {
       const asset = assetsRef.current.find(a => a.id === assetId)
       if (asset) upsertAsset(userId, { ...asset, sells: asset.sells.filter(s => s.id !== sellId) }).catch(e => { console.error(e); setDbSaveErr(true) })
+    }
+  }, [userId])
+
+  const handleEditEntry = useCallback((assetId: string, entryId: string, qty: number, price: number, totalAmount?: number) => {
+    const updateEntries = (entries: BuyEntry[]) => entries.map(e => {
+      if (e.id !== entryId) return e
+      const updated: BuyEntry = { ...e, quantity: qty, price }
+      if (totalAmount !== undefined) updated.totalAmount = totalAmount
+      else delete updated.totalAmount
+      return updated
+    })
+    setAssets(prev => prev.map(a => a.id !== assetId ? a : { ...a, entries: updateEntries(a.entries) }))
+    if (userId) {
+      const asset = assetsRef.current.find(a => a.id === assetId)
+      if (asset) upsertAsset(userId, { ...asset, entries: updateEntries(asset.entries) }).catch(e => { console.error(e); setDbSaveErr(true) })
     }
   }, [userId])
 
@@ -1481,6 +1616,7 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
                   onAddSell={handleAddSell}
                   onDeleteEntry={handleDeleteEntry}
                   onDeleteSell={handleDeleteSell}
+                  onEditEntry={handleEditEntry}
                 />
               ))}
             </div>

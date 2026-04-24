@@ -8,7 +8,7 @@ import {
   PieChart, Pie, Cell, Tooltip,
   ResponsiveContainer, Sector,
 } from 'recharts'
-import { BarChart2, RefreshCw, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
+import { BarChart2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, ChevronDown } from 'lucide-react'
 import type { Asset, MarketType } from './Portfolio'
 import { fetchAssets } from '../lib/db'
 import { getPrice, type PriceResult } from '../lib/priceCache'
@@ -177,7 +177,9 @@ const MDD_SCENARIOS = [
   },
 ] as const
 
-function MddSection({ assets, krwRate }: { assets: Asset[]; krwRate: number }) {
+function MddSection({ assets, krwRate, open, onToggle }: {
+  assets: Asset[]; krwRate: number; open: boolean; onToggle: () => void
+}) {
   const portfolioKRW = assets.reduce((s, a) => {
     const cost = holdingCost(a)
     return s + (MARKET[a.market].currency === 'KRW' ? cost : cost * krwRate)
@@ -186,11 +188,16 @@ function MddSection({ assets, krwRate }: { assets: Asset[]; krwRate: number }) {
 
   return (
     <div className="card space-y-4">
-      <div className="flex items-center gap-2">
-        <TrendingDown className="w-4 h-4 text-rose-400" />
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-2 text-left"
+      >
+        <TrendingDown className="w-4 h-4 text-rose-400 flex-shrink-0" />
         <p className="text-sm font-semibold text-gray-200">역사적 위기 시뮬레이션 (MDD)</p>
         <span className="text-[10px] text-gray-600 font-normal ml-1">내 비중 적용</span>
-      </div>
+        <ChevronDown className={`w-4 h-4 text-gray-500 ml-auto flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <>
       <p className="text-xs text-gray-500 leading-relaxed">
         현재 포트폴리오 배분에 역사적 최대 낙폭(MDD)을 적용한 예상 손실입니다. 시장별 MDD 가중 평균으로 계산됩니다.
       </p>
@@ -237,6 +244,7 @@ function MddSection({ assets, krwRate }: { assets: Asset[]; krwRate: number }) {
         })}
       </div>
       <p className="text-[10px] text-gray-700">과거 데이터 기준 최대 낙폭 추정치 · 미래 성과 보장 아님 · 투자 권유 아님</p>
+      </>}
     </div>
   )
 }
@@ -292,8 +300,8 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
           <PieChart>
             <Pie data={data} cx="50%" cy="50%" outerRadius={70} innerRadius={54}
               paddingAngle={4} dataKey="value" labelLine={false}
-              {...({ cornerRadius: 4 } as object)}
               animationBegin={0} animationDuration={1200} animationEasing="ease-out"
+              {...({ cornerRadius: 4 } as object)}
               {...({ activeIndex: activeIdx, activeShape: renderActiveShape } as object)}
               onMouseEnter={(_, i) => setActiveIdx(i)}
               onMouseLeave={() => setActiveIdx(undefined)}>
@@ -303,17 +311,8 @@ function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamental
           </PieChart>
         </ResponsiveContainer>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          {activeIdx !== undefined ? (
-            <>
-              <span className="text-[11px] font-semibold text-center leading-tight px-2" style={{ color: data[activeIdx]?.color }}>{data[activeIdx]?.name}</span>
-              <span className="text-[10px] text-gray-400 mono">{total > 0 ? ((data[activeIdx]?.value / total) * 100).toFixed(0) : 0}%</span>
-            </>
-          ) : (
-            <>
-              <span className="text-base font-bold mono text-gray-200">{total}</span>
-              <span className="text-[10px] text-gray-500">종목</span>
-            </>
-          )}
+          <span className="text-base font-bold mono text-gray-200">{total}</span>
+          <span className="text-[10px] text-gray-500">종목</span>
         </div>
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-2">
@@ -405,12 +404,13 @@ export default function Analytics({ userId }: { userId: string | null }) {
   const [livePrices,  setLivePrices]  = useState<Map<string, PriceResult>>(new Map())
   const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set())
 
-  const [fundamentals, setFundamentals] = useState<Map<string, Fundamentals>>(new Map())
-  const [fundLoading,  setFundLoading]  = useState(false)
+  const [fundamentals,  setFundamentals]  = useState<Map<string, Fundamentals>>(new Map())
+  const [fundLoading,   setFundLoading]   = useState(true)
 
   // pie hover state
   const [pieActiveIdx, setPieActiveIdx] = useState<number | undefined>(undefined)
   const [barActiveIdx, setBarActiveIdx] = useState<number | undefined>(undefined)
+  const [mddOpen,      setMddOpen]      = useState(false)
 
   const hasAutoFetched = useRef(false)
 
@@ -463,18 +463,26 @@ export default function Analytics({ userId }: { userId: string | null }) {
   useEffect(() => {
     if (loading || assets.length === 0) return
     const tickers = assets.map(a => resolveTickerForAsset(a)).filter(Boolean) as string[]
-    if (tickers.length === 0) return
+    if (tickers.length === 0) { setFundLoading(false); return }
 
     setFundLoading(true)
-    getCachedFundamentals(tickers).then(({ data, stale }) => {
-      setFundamentals(data)
-      setFundLoading(false)
-      if (stale.length > 0) {
-        refreshFundamentals(stale).then(fresh => {
-          setFundamentals(prev => new Map([...prev, ...fresh]))
-        })
-      }
-    })
+    getCachedFundamentals(tickers)
+      .then(({ data, stale }) => {
+        setFundamentals(data)
+        if (stale.length > 0) {
+          refreshFundamentals(stale).then(fresh => {
+            setFundamentals(prev => {
+              const next = new Map(prev)
+              for (const [ticker, f] of fresh) {
+                const existing = next.get(ticker)
+                next.set(ticker, { ...f, sector: f.sector ?? existing?.sector ?? null })
+              }
+              return next
+            })
+          })
+        }
+      })
+      .finally(() => setFundLoading(false))
   }, [loading, assets])
 
   // ── 전체 새로고침 ─────────────────────────────────────────
@@ -546,6 +554,8 @@ export default function Analytics({ userId }: { userId: string | null }) {
 
   const hasTickerAssets = assets.some(a => resolveTickerForAsset(a))
   const isFetching      = fetchingIds.size > 0
+  const hasSectorData   = Array.from(fundamentals.values()).some(f => f.sector)
+  const showSectorCol   = hasTickerAssets && (fundLoading || hasSectorData)
 
   // ── Active Pie Shape (글로우 레이어 + 확장) ────────────────
   function renderActivePieShape(props: any) {
@@ -640,117 +650,123 @@ export default function Analytics({ userId }: { userId: string | null }) {
         />
       </div>
 
-      {/* 자산 배분 차트 */}
-      <div className="grid md:grid-cols-2 gap-4">
-        {/* 파이 차트 — 자산 배분 */}
-        <div className="card">
-          <p className="text-sm font-semibold text-gray-200 mb-4">자산 배분</p>
-          <div style={{ width: '100%', height: 220, position: 'relative' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData} cx="50%" cy="50%" outerRadius={82} innerRadius={62}
-                  paddingAngle={4} dataKey="value" labelLine={false}
-                  {...({ cornerRadius: 4 } as object)}
-                  animationBegin={0} animationDuration={1200} animationEasing="ease-out"
-                  {...({ activeIndex: pieActiveIdx, activeShape: renderActivePieShape } as object)}
-                  onMouseEnter={(_, index) => setPieActiveIdx(index)}
-                  onMouseLeave={() => setPieActiveIdx(undefined)}>
-                  {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                </Pie>
-                <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
-              </PieChart>
-            </ResponsiveContainer>
-            {pieData.length > 0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                {pieActiveIdx !== undefined ? (
-                  <>
-                    <span className="text-[11px] font-semibold text-center leading-tight px-4" style={{ color: pieData[pieActiveIdx]?.color }}>{pieData[pieActiveIdx]?.name}</span>
-                    <span className="text-sm font-bold mono text-gray-200">{fmtMan(pieData[pieActiveIdx]?.value ?? 0)}</span>
-                    <span className="text-[10px] text-gray-500">{totalKrw > 0 ? ((pieData[pieActiveIdx]?.value ?? 0) / totalKrw * 100).toFixed(1) : 0}%</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-sm font-bold mono text-gray-200">{fmtMan(totalKrw)}</span>
-                    <span className="text-[10px] text-gray-500">총 보유</span>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
-            {pieData.map((entry, i) => {
-              const pct = totalKrw > 0 ? (entry.value / totalKrw * 100).toFixed(1) : '0'
-              return (
-                <div key={i} className={`flex items-center gap-1.5 cursor-default transition-opacity ${pieActiveIdx !== undefined && pieActiveIdx !== i ? 'opacity-40' : 'opacity-100'}`}
-                  onMouseEnter={() => setPieActiveIdx(i)}
-                  onMouseLeave={() => setPieActiveIdx(undefined)}>
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                  <span className="text-xs text-gray-400">{entry.name}</span>
-                  <span className="text-xs text-gray-500 mono">{pct}%</span>
-                  <span className="text-[10px] text-gray-700 mono">{fmtMan(entry.value)}</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+      {/* 도넛 차트 3개 — 카드 쉘은 항상 나란히, 안의 차트는 fundLoading 해제 시 동시 표시 */}
+      {/* chartsReady=false: 카드 쉘 유지 + 내부 스켈레톤 / true: 도넛 차트 동시 마운트 */}
+      {(() => {
+        const chartsReady = !fundLoading || !showSectorCol
+        return (
+          <div className={`grid ${showSectorCol ? 'lg:grid-cols-3' : ''} md:grid-cols-2 gap-4`}>
 
-        {/* 시장별 분포 파이 차트 */}
-        <div className="card">
-          <p className="text-sm font-semibold text-gray-200 mb-4">시장별 분포</p>
-          <div style={{ width: '100%', height: 220, position: 'relative' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData} cx="50%" cy="50%" outerRadius={82} innerRadius={62}
-                  paddingAngle={4} dataKey="value" labelLine={false}
-                  {...({ cornerRadius: 4 } as object)}
-                  animationBegin={0} animationDuration={1200} animationEasing="ease-out"
-                  {...({ activeIndex: barActiveIdx, activeShape: renderActivePieShape } as object)}
-                  onMouseEnter={(_, index) => setBarActiveIdx(index)}
-                  onMouseLeave={() => setBarActiveIdx(undefined)}>
-                  {pieData.map((entry, index) => <Cell key={`bar-cell-${index}`} fill={entry.color} />)}
-                </Pie>
-                <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
-              </PieChart>
-            </ResponsiveContainer>
-            {pieData.length > 0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                {barActiveIdx !== undefined ? (
-                  <>
-                    <span className="text-[11px] font-semibold" style={{ color: pieData[barActiveIdx]?.color }}>{pieData[barActiveIdx]?.name}</span>
-                    <span className="text-sm font-bold mono text-gray-200">{fmtMan(pieData[barActiveIdx]?.value ?? 0)}</span>
-                    <span className="text-[10px] text-gray-500">{totalKrw > 0 ? ((pieData[barActiveIdx]?.value ?? 0) / totalKrw * 100).toFixed(1) : 0}%</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-base font-bold mono text-gray-200">{pieData.length}</span>
-                    <span className="text-[10px] text-gray-500">시장</span>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
-            {pieData.map((entry, i) => {
-              const pct = totalKrw > 0 ? (entry.value / totalKrw * 100).toFixed(1) : '0'
-              return (
-                <div key={i} className={`flex items-center gap-1.5 cursor-default transition-opacity ${barActiveIdx !== undefined && barActiveIdx !== i ? 'opacity-40' : 'opacity-100'}`}
-                  onMouseEnter={() => setBarActiveIdx(i)}
-                  onMouseLeave={() => setBarActiveIdx(undefined)}>
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                  <span className="text-xs text-gray-400">{entry.name}</span>
-                  <span className="text-xs text-gray-500 mono">{pct}%</span>
-                  <span className="text-[10px] text-gray-700 mono">{fmtMan(entry.value)}</span>
+            {/* ── 자산 배분 ── */}
+            <div className="card">
+              <p className="text-sm font-semibold text-gray-200 mb-4">자산 배분</p>
+              {!chartsReady ? <Skel h="h-[260px]" /> : (
+                <div style={{ width: '100%', height: 200, position: 'relative' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData} cx="50%" cy="50%" outerRadius={82} innerRadius={62}
+                        paddingAngle={4} dataKey="value" labelLine={false}
+                        animationBegin={0} animationDuration={1200} animationEasing="ease-out"
+                        {...({ cornerRadius: 4 } as object)}
+                        {...({ activeIndex: pieActiveIdx, activeShape: renderActivePieShape } as object)}
+                        onMouseEnter={(_, index) => setPieActiveIdx(index)}
+                        onMouseLeave={() => setPieActiveIdx(undefined)}>
+                        {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                      </Pie>
+                      <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  {pieData.length > 0 && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-sm font-bold mono text-gray-200">{fmtMan(totalKrw)}</span>
+                      <span className="text-[10px] text-gray-500">총 보유</span>
+                    </div>
+                  )}
                 </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
+              )}
+              {chartsReady && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+                  {pieData.map((entry, i) => {
+                    const pct = totalKrw > 0 ? (entry.value / totalKrw * 100).toFixed(1) : '0'
+                    return (
+                      <div key={i} className={`flex items-center gap-1.5 cursor-default transition-opacity ${pieActiveIdx !== undefined && pieActiveIdx !== i ? 'opacity-40' : 'opacity-100'}`}
+                        onMouseEnter={() => setPieActiveIdx(i)}
+                        onMouseLeave={() => setPieActiveIdx(undefined)}>
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+                        <span className="text-xs text-gray-400">{entry.name}</span>
+                        <span className="text-xs text-gray-500 mono">{pct}%</span>
+                        <span className="text-[10px] text-gray-700 mono">{fmtMan(entry.value)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
 
-      {/* 역사적 위기 시뮬레이션 (MDD) — 자산 배분 바로 아래 */}
-      <MddSection assets={assets} krwRate={krwRate} />
+            {/* ── 시장별 분포 ── */}
+            <div className="card">
+              <p className="text-sm font-semibold text-gray-200 mb-4">시장별 분포</p>
+              {!chartsReady ? <Skel h="h-[260px]" /> : (
+                <div style={{ width: '100%', height: 200, position: 'relative' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData} cx="50%" cy="50%" outerRadius={82} innerRadius={62}
+                        paddingAngle={4} dataKey="value" labelLine={false}
+                        animationBegin={0} animationDuration={1200} animationEasing="ease-out"
+                        {...({ cornerRadius: 4 } as object)}
+                        {...({ activeIndex: barActiveIdx, activeShape: renderActivePieShape } as object)}
+                        onMouseEnter={(_, index) => setBarActiveIdx(index)}
+                        onMouseLeave={() => setBarActiveIdx(undefined)}>
+                        {pieData.map((entry, index) => <Cell key={`bar-cell-${index}`} fill={entry.color} />)}
+                      </Pie>
+                      <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  {pieData.length > 0 && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-base font-bold mono text-gray-200">{pieData.length}</span>
+                      <span className="text-[10px] text-gray-500">시장</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {chartsReady && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+                  {pieData.map((entry, i) => {
+                    const pct = totalKrw > 0 ? (entry.value / totalKrw * 100).toFixed(1) : '0'
+                    return (
+                      <div key={i} className={`flex items-center gap-1.5 cursor-default transition-opacity ${barActiveIdx !== undefined && barActiveIdx !== i ? 'opacity-40' : 'opacity-100'}`}
+                        onMouseEnter={() => setBarActiveIdx(i)}
+                        onMouseLeave={() => setBarActiveIdx(undefined)}>
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+                        <span className="text-xs text-gray-400">{entry.name}</span>
+                        <span className="text-xs text-gray-500 mono">{pct}%</span>
+                        <span className="text-[10px] text-gray-700 mono">{fmtMan(entry.value)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── 섹터 분포 ── */}
+            {showSectorCol && (
+              !chartsReady
+                ? (
+                  <div className="card">
+                    <p className="text-sm font-semibold text-gray-200 mb-4">섹터 분포</p>
+                    <Skel h="h-[220px]" />
+                  </div>
+                )
+                : <SectorSection fundamentals={fundamentals} />
+            )}
+
+          </div>
+        )
+      })()}
+
 
       {/* 실시간 평가손익 */}
       {hasTickerAssets && (
@@ -820,20 +836,14 @@ export default function Analytics({ userId }: { userId: string | null }) {
         </div>
       )}
 
-      {/* 섹터 분포 + 배당 수익률 + 목표가 상승여력 */}
+      {/* 역사적 위기 시뮬레이션 (MDD) */}
+      <MddSection assets={assets} krwRate={krwRate} open={mddOpen} onToggle={() => setMddOpen(v => !v)} />
+
+      {/* 배당 수익률 + 목표가 상승여력 */}
       {fundamentals.size > 0 && (
         <div className="grid md:grid-cols-2 gap-4">
-          <SectorSection fundamentals={fundamentals} />
-          <div className="space-y-4">
-            <DividendSection fundamentals={fundamentals} />
-            <UpsideSection fundamentals={fundamentals} />
-          </div>
-        </div>
-      )}
-      {fundLoading && fundamentals.size === 0 && (
-        <div className="grid md:grid-cols-2 gap-4">
-          <Skel h="h-64" />
-          <Skel h="h-64" />
+          <DividendSection fundamentals={fundamentals} />
+          <UpsideSection fundamentals={fundamentals} />
         </div>
       )}
 

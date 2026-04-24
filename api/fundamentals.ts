@@ -98,31 +98,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const raw = (req.query.tickers as string | undefined)?.trim()
   if (!raw) return res.status(400).json({ error: '`tickers` 파라미터가 필요합니다.' })
 
-  const tickers  = raw.split(',').map(t => t.trim()).filter(Boolean).slice(0, 15)
-  const FMP_KEY  = process.env.FMP_API_KEY ?? ''
-  const results: FundamentalsResult[] = []
-  const toFetch:  string[] = []
+  const tickers = raw.split(',').map(t => t.trim()).filter(Boolean).slice(0, 15)
+  const FMP_KEY = process.env.FMP_API_KEY ?? ''
 
-  // ── 1. Supabase 캐시 조회 (24시간 TTL) ───────────────────────
-  for (const ticker of tickers) {
-    const cached = await getCache<FundamentalsResult>(`fundamentals:${ticker}`)
-    if (cached) {
-      results.push(cached)
-    } else {
-      toFetch.push(ticker)
-    }
-  }
+  // ── 1. Supabase 캐시 병렬 조회 ───────────────────────────────
+  const cacheResults = await Promise.all(
+    tickers.map(t => getCache<FundamentalsResult>(`fundamentals:${t}`))
+  )
 
-  // ── 2. 캐시 미스 티커만 FMP 호출 ─────────────────────────────
-  for (const ticker of toFetch) {
-    const data = await fetchFmpFundamentals(ticker, FMP_KEY)
-    await setCache(`fundamentals:${ticker}`, data, TTL.FUNDAMENTALS)
-    results.push(data)
-    if (toFetch.length > 1) await new Promise(r => setTimeout(r, 200))
-  }
+  const cached: FundamentalsResult[] = []
+  const toFetch: string[] = []
+  cacheResults.forEach((hit, i) => {
+    if (hit) cached.push(hit)
+    else toFetch.push(tickers[i])
+  })
+
+  // ── 2. 캐시 미스 티커 FMP 병렬 호출 ─────────────────────────
+  const fetched: FundamentalsResult[] = toFetch.length > 0
+    ? await Promise.all(toFetch.map(t => fetchFmpFundamentals(t, FMP_KEY)))
+    : []
+
+  // 캐시 저장 (응답 지연 방지를 위해 완료 대기 없이 fire-and-forget)
+  fetched.forEach((data, i) => {
+    setCache(`fundamentals:${toFetch[i]}`, data, TTL.FUNDAMENTALS).catch(() => {})
+  })
+
+  const all = [...cached, ...fetched]
 
   // 원래 순서 복원
-  const ordered = tickers.map(t => results.find(r => r.ticker === t) ?? {
+  const ordered = tickers.map(t => all.find(r => r.ticker === t) ?? {
     ticker: t, pe_ratio: null, dividend_yield: null,
     beta: null, sector: null, target_price: null, current_price: null,
   } satisfies FundamentalsResult)

@@ -415,7 +415,7 @@ export default defineConfig(({ mode }) => {
     }
   }
 
-  // ── /api/economic-calendar ───────────────────────────────────
+  // ── /api/economic-calendar (Finnhub) ────────────────────────
   function devEconCalendarPlugin(): Plugin {
     return {
       name: 'dev-api-economic-calendar',
@@ -423,31 +423,48 @@ export default defineConfig(({ mode }) => {
         server.middlewares.use('/api/economic-calendar', async (_req: IncomingMessage, res: ServerResponse) => {
           res.setHeader('Content-Type', 'application/json')
           const today = new Date().toISOString().slice(0, 10)
-          if (!FMP_KEY) {
-            res.writeHead(200); res.end(JSON.stringify({ events: [], date: today, error: 'No FMP key' })); return
+          if (!FINNHUB_KEY) { res.writeHead(200); res.end(JSON.stringify({ events: [], date: today })); return }
+
+          const IMPACT_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
+          const COUNTRY_CURRENCY: Record<string, string> = { US: 'USD', KR: 'KRW' }
+          function toImpact(raw: unknown) {
+            const s = String(raw ?? '').toLowerCase()
+            return s === 'high' ? 'High' : s === 'medium' ? 'Medium' : 'Low'
           }
+          function fmt(val: number | null | undefined, unit: string): string | null {
+            if (val == null) return null
+            const s = Number.isInteger(val) ? String(val) : parseFloat(val.toFixed(3)).toString()
+            return unit ? `${s}${unit}` : s
+          }
+
           try {
-            const url = `https://financialmodelingprep.com/api/v3/economic_calendar?from=${today}&to=${today}&apikey=${FMP_KEY}`
-            const r = await fetch(url, { signal: AbortSignal.timeout(8_000) })
-            if (!r.ok) throw new Error(`FMP ${r.status}`)
-            const raw = await r.json() as any[]
-            const IMPACT_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
-            const events = (Array.isArray(raw) ? raw : [])
+            const url = `https://finnhub.io/api/v1/calendar/economic?from=${today}&to=${today}&token=${FINNHUB_KEY}`
+            const r = await fetch(url, {
+              headers: { 'X-Finnhub-Token': FINNHUB_KEY },
+              signal: AbortSignal.timeout(8_000),
+            })
+            if (!r.ok) throw new Error(`Finnhub ${r.status}`)
+            const body = await r.json() as unknown
+            const items: any[] = (body as any)?.economicCalendar ?? []
+            const events = items
+              .filter((e: any) => e.country === 'US' || e.country === 'KR')
               .map((e: any) => ({
-                date: String(e.date ?? ''), country: String(e.country ?? ''),
-                event: String(e.event ?? ''), currency: String(e.currency ?? ''),
-                impact: String(e.impact ?? 'Low'),
-                previous: e.previous != null ? String(e.previous) : null,
-                estimate: e.estimate != null ? String(e.estimate) : null,
-                actual:   e.actual   != null ? String(e.actual)   : null,
+                date:     `${today} ${String(e.time ?? '00:00:00').slice(0, 8)}`,
+                country:  String(e.country ?? ''),
+                event:    String(e.event   ?? ''),
+                currency: COUNTRY_CURRENCY[e.country as string] ?? 'USD',
+                impact:   toImpact(e.impact),
+                previous: fmt(e.prev,     e.unit ?? ''),
+                estimate: fmt(e.estimate, e.unit ?? ''),
+                actual:   fmt(e.actual,   e.unit ?? ''),
               }))
               .sort((a: any, b: any) => {
                 const ia = IMPACT_ORDER[a.impact] ?? 2, ib = IMPACT_ORDER[b.impact] ?? 2
                 return ia !== ib ? ia - ib : a.date.localeCompare(b.date)
               })
             res.writeHead(200); res.end(JSON.stringify({ events, date: today }))
-          } catch (e) {
-            res.writeHead(200); res.end(JSON.stringify({ events: [], date: today, error: String(e) }))
+          } catch {
+            res.writeHead(200); res.end(JSON.stringify({ events: [], date: today }))
           }
         })
       },

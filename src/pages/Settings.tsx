@@ -502,13 +502,14 @@ export default function Settings({
           <ThemeToggle theme={theme} onTheme={onTheme} />
         </Row>
         <div className="flex gap-3">
-          <div className="flex-1 rounded-xl border border-gray-700 bg-gray-900 p-3 flex items-center gap-2 relative overflow-hidden">
+          <div className="flex-1 rounded-xl p-3 flex items-center gap-2 relative overflow-hidden"
+            style={{ background: '#111827', border: '1px solid #374151' }}>
             <div className="w-full space-y-1.5">
-              <div className="h-2 bg-gray-700 rounded-full w-3/4" />
-              <div className="h-2 bg-gray-800 rounded-full w-1/2" />
-              <div className="h-2 bg-brand-600/40 rounded-full w-2/3" />
+              <div className="h-2 rounded-full w-3/4" style={{ background: '#374151' }} />
+              <div className="h-2 rounded-full w-1/2" style={{ background: '#1f2937' }} />
+              <div className="h-2 rounded-full w-2/3" style={{ background: 'rgba(108,99,255,0.4)' }} />
             </div>
-            <span className="absolute bottom-1.5 right-2 text-[9px] text-gray-600">Dark</span>
+            <span className="absolute bottom-1.5 right-2 text-[9px]" style={{ color: '#4b5563' }}>Dark</span>
           </div>
           <div className="flex-1 rounded-xl border border-slate-200 bg-white p-3 flex items-center gap-2 relative overflow-hidden">
             <div className="w-full space-y-1.5">

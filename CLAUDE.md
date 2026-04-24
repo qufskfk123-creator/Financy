@@ -21,10 +21,10 @@ D:\AI study\Financy\
 │   ├── main.tsx
 │   ├── index.css                # 글로벌 CSS (Tailwind + CSS 변수)
 │   ├── pages/
-│   │   ├── Dashboard.tsx        # 기상도 (Fear&Greed, 환율, 자금흐름, 뉴스)
+│   │   ├── Dashboard.tsx        # 기상도 (Fear&Greed, 유동성날씨, 환율, 금리, 경제캘린더, 뉴스)
 │   │   ├── Portfolio.tsx        # 포트폴리오 관리 (CRUD, 손익)
 │   │   ├── RiskCenter.tsx       # 리스크 센터 (방어지표, FX 노출, 집중도)
-│   │   ├── Analytics.tsx        # 분석 (파이차트, MDD, 섹터, 배당, 목표가)
+│   │   ├── Analytics.tsx        # 분석 (파이차트, 실시간평가손익, MDD, 섹터, 배당, 목표가)
 │   │   ├── Settings.tsx         # 설정 (테마, 닉네임, 이모지, 채팅 설정)
 │   │   └── Auth.tsx             # 인증 페이지
 │   ├── components/
@@ -50,10 +50,12 @@ D:\AI study\Financy\
 │   ├── search.ts                # 종목 검색
 │   ├── fundamentals.ts          # 재무 지표
 │   ├── exchange-rates.ts        # 환율 (Frankfurter)
+│   ├── update-exchange-rates.ts # Vercel Cron — 매일 00:05 UTC 환율 캐시 갱신
 │   ├── fear-greed.ts            # Fear & Greed Index
 │   ├── liquidity.ts             # 자금 흐름 (QQQ vs UUP)
-│   ├── market-status.ts         # 시장 온도
+│   ├── market-status.ts         # 유동성 날씨 점수 + 지수 3개
 │   ├── market-news.ts           # 뉴스 RSS
+│   ├── economic-calendar.ts     # 경제 캘린더 (Finnhub)
 │   ├── ticker-tape.ts           # TickerTape 시세 (FeedItem 타입)
 │   └── lib/cache.ts             # Supabase market_cache 유틸
 ├── vite.config.ts               # 개발 서버 API 미들웨어 포함
@@ -99,6 +101,18 @@ interface ChatSettings { chatEnabled: boolean; badgeEnabled: boolean; opacity: n
 type FeedItem =
   | { kind: 'ticker'; symbol: string; name: string; price: number; change: number; changePct: number; currency: 'KRW' | 'USD' }
   | { kind: 'sep';    label: string }
+
+// api/economic-calendar.ts
+interface EconEvent {
+  date: string      // "YYYY-MM-DD HH:MM:SS"
+  country: string
+  event: string
+  currency: string
+  impact: string    // "High" | "Medium" | "Low"
+  previous: string | null
+  estimate: string | null
+  actual: string | null
+}
 ```
 
 ---
@@ -274,15 +288,65 @@ function riskColor(score: number) {
 
 ## Analytics.tsx 핵심 로직
 
+### 섹션 순서 (위→아래)
+1. 요약 통계 (4개 StatCard)
+2. 도넛 차트 3종 (자산 배분 / 시장별 분포 / 섹터 분포) — 동시 로딩
+3. **실시간 평가손익** (ticker 자산만)
+4. **역사적 위기 시뮬레이션 MDD** — 접힘/펼침 accordion
+5. 배당 수익률 + 목표가 상승여력
+6. 실현손익 내역
+
 ### MDD 역사적 위기 시뮬레이션
 
 ```typescript
+// MddSection props: { assets, krwRate, open, onToggle }
+// - open/onToggle: 접힘/펼침 accordion. mddOpen 상태는 Analytics 메인 컴포넌트에 있음
+// - 헤더 버튼 클릭 → ChevronDown 180° 회전 + {open && <>...content...</>}
+// - portfolioKRW <= 0 이면 null 반환
+
 const MDD_SCENARIOS = [
-  { name: '2008 금융위기',    drawdowns: { 'K-Stock': 54, 'U-Stock': 56, 'Crypto': 0 } },
-  { name: '2020 코로나 충격', drawdowns: { 'K-Stock': 36, 'U-Stock': 34, 'Crypto': 50 } },
-  { name: '2022 긴축 쇼크',   drawdowns: { 'K-Stock': 26, 'U-Stock': 19, 'Crypto': 75 } },
-  { name: '닷컴버블 붕괴',    drawdowns: { 'K-Stock': 55, 'U-Stock': 49, 'Crypto': 0 } },
+  {
+    name: '2008 금융위기',    sub: 'Global Financial Crisis', year: '2008–09',
+    emoji: '🏦', barColor: 'bg-rose-500', color: 'text-rose-500',
+    drawdowns: { 'K-Stock': 54, 'U-Stock': 56, 'Crypto': 0,  'Cash': 0 },
+  },
+  {
+    name: '2020 코로나 충격', sub: 'COVID-19 Crash',          year: '2020.02–03',
+    emoji: '🦠', barColor: 'bg-orange-400', color: 'text-orange-400',
+    drawdowns: { 'K-Stock': 36, 'U-Stock': 34, 'Crypto': 50, 'Cash': 0 },
+  },
+  {
+    name: '2022 긴축 쇼크',   sub: 'Fed Rate Hike Crisis',    year: '2022.01–12',
+    emoji: '📈', barColor: 'bg-amber-400', color: 'text-amber-400',
+    drawdowns: { 'K-Stock': 26, 'U-Stock': 19, 'Crypto': 75, 'Cash': 0 },
+  },
+  {
+    name: '닷컴버블 붕괴',    sub: 'Dot-com Bubble',          year: '2000–02',
+    emoji: '💻', barColor: 'bg-violet-400', color: 'text-violet-400',
+    drawdowns: { 'K-Stock': 55, 'U-Stock': 49, 'Crypto': 0,  'Cash': 0 },
+  },
 ]
+```
+
+### 섹터 분포 차트 & fundamentals 로딩
+
+```typescript
+const hasSectorData = Array.from(fundamentals.values()).some(f => f.sector)
+const showSectorCol = hasTickerAssets && (fundLoading || hasSectorData)
+// chartsReady (IIFE 내부):
+const chartsReady = !fundLoading || !showSectorCol
+
+// getCachedFundamentals → setFundamentals(data)
+// stale 있으면 refreshFundamentals → sector 보존 머지:
+setFundamentals(prev => {
+  const next = new Map(prev)
+  for (const [ticker, f] of fresh) {
+    const existing = next.get(ticker)
+    next.set(ticker, { ...f, sector: f.sector ?? existing?.sector ?? null })
+  }
+  return next
+})
+// 이유: FMP API가 sector를 null로 반환할 때 기존 캐시된 값을 덮어쓰지 않기 위함
 ```
 
 ---
@@ -375,13 +439,13 @@ chat_anon boolean NOT NULL DEFAULT false
 
 | API | 용도 | 키 필요 |
 |-----|------|---------|
-| Finnhub | 미국 주식 시세/검색/TickerTape(NVDA,AAPL,TSLA) | ✅ VITE_FINNHUB_API_KEY |
+| Finnhub | 미국 주식 시세/검색/TickerTape(NVDA,AAPL,TSLA)/유동성날씨/경제캘린더 | ✅ FINNHUB_API_KEY |
 | Naver 주식 | 한국 주식 시세/검색/TickerTape(KOSPI,KOSDAQ) | ❌ |
 | Upbit | 암호화폐 시세/검색/TickerTape(BTC,ETH,SOL) | ❌ |
-| FMP | 재무 지표 (PER, 배당, 베타) | ✅ VITE_FMP_API_KEY |
-| Frankfurter | 환율/TickerTape(USD/KRW) | ❌ |
+| FMP | 재무 지표 (PER, 배당, 베타) | ✅ FMP_API_KEY |
+| Frankfurter | 환율/TickerTape(USD/KRW) + Vercel Cron 캐시 | ❌ |
 | alternative.me | Fear & Greed Index | ❌ |
-| RSS (한경 등) | 뉴스 | ❌ |
+| RSS (Reuters/CNBC/MarketWatch) | 뉴스 | ❌ |
 
 ---
 
@@ -403,15 +467,11 @@ chat_anon boolean NOT NULL DEFAULT false
 --gauge-panel-fill, --gauge-text-rect, --gauge-halo
 --gauge-sub-color, --gauge-baseline, --gauge-tick-dim, --gauge-edge-label
 
-/* MarketTempCard (유동성 항해) */
+/* MarketTempCard (유동성 날씨) */
 --mtp-bg, --mtp-border
 --mtp-tank-bg, --mtp-tank-border, --mtp-tank-shadow
 --mtp-idx-bg, --mtp-idx-border
 --mtp-skel-bg, --mtp-scale-color
---mtp-zone-label   /* 활성 존 텍스트: dark=#ffffff / light=#0a0a18 */
---mtp-zone-past    /* 비활성 존 (지난): 반투명 */
---mtp-zone-inactive/* 비활성 존 (미래): 더 반투명 */
---mtp-zone-divider /* 존 구분선 */
 
 /* TickerTape */
 --ticker-bg, --ticker-border, --ticker-fade
@@ -434,7 +494,7 @@ chat_anon boolean NOT NULL DEFAULT false
 ## 개발 시 주의사항
 
 1. **TypeScript strict** — `npx tsc --project tsconfig.app.json --noEmit`으로 검증 (tsconfig.app.json에 noUnusedLocals: true)
-2. **애니메이션 분리**: framer-motion은 App.tsx 페이지 전환 + FloatingChat 드래그 + MarketTempCard 수위에만 사용. TickerTape는 순수 CSS, FearGreedGauge는 SVG + CSS transform
+2. **애니메이션 분리**: framer-motion은 App.tsx 페이지 전환 + FloatingChat 드래그 + Dashboard 경제캘린더 모바일 accordion에만 사용. TickerTape는 순수 CSS, FearGreedGauge는 SVG + CSS transform, MarketTempCard는 CSS transition
 3. **가격 캐시 두 종류**: `priceCache.ts`(Supabase 기반)와 `price-cache.ts`(localStorage 기반) 혼용 — 혼동 주의
 4. **시드 기준 계산**: RiskCenter의 모든 비율은 `seedKRW`(원화시드 + USD시드×환율) 기준
 5. **모바일 대응**: 하단 탭바(`md:hidden`), 메인 컨텐츠 `pb-20 md:pb-0`
@@ -446,6 +506,7 @@ chat_anon boolean NOT NULL DEFAULT false
 11. **Toggle 썸 위치**: `translate-x` 대신 `left` 사용 — 기본 폰트 16.5px로 인해 rem 기반 `w-4`가 16.5px로 렌더링되어 썸이 트랙 밖으로 나가는 문제 방지. 썸 크기는 `w-[16px] h-[16px]` 명시
 12. **익명 채팅 DB**: `messages.user_id` nullable, `guest_session_id` 컬럼 추가. Supabase 타입 자동생성과 불일치하므로 insert 시 `as never` 캐스팅 사용
 13. **보호 페이지**: `portfolio` + `risk-center` + `analytics` 모두 로그인 필수. `setAuthRedirectTo(page)` 로 로그인 후 원래 페이지로 자동 이동
+14. **fundamentalsCache sector 보존**: `refreshFundamentals` upsert 시 `...(f.sector != null ? { sector: f.sector } : {})` 조건부 스프레드 — FMP가 sector=null 반환해도 DB 기존값 보호. 상태 머지도 동일하게 `f.sector ?? existing?.sector ?? null`
 
 ---
 
@@ -460,16 +521,38 @@ chat_anon boolean NOT NULL DEFAULT false
 - 베이스라인(가로선) 제거, 중앙 배경 rect 제거
 - 공포/탐욕 레이블 위치: `mt-5`
 
-### MarketTempCard / 유동성 항해 (Dashboard.tsx)
-- 수조 탱크 높이: `88px → 108px`
-- 존 오버레이: `z-[6]`, 이모지 `33px`, 레이블 `16px bold`, 점수 `14px`
-- 활성 존: `scale(1.15)` + 이중 `drop-shadow` 글로우, `opacity:1`
-- 비활성 존: `opacity:0.3` (균등 처리, past/future 구분 없음)
-- 텍스트 색상: `var(--mtp-zone-label)` — dark=`#ffffff` / light=`#0a0a18`
-- 물 그라디언트 투명도: hex alpha `12/0a` (매우 투명)
-- 파도 속도(waveSpeed): 전 구간 절반 이하로 감소
-- 네온 글로우(inset boxShadow 레이어) 제거
-- 수위 스케일 숫자: `text-slate-300`
+### MarketTempCard / 유동성 날씨 (Dashboard.tsx)
+수위 탱크 방식에서 **5단계 기상 카드 그리드** 방식으로 완전 재설계됨.
+
+```typescript
+// 5단계 (WEATHER_STAGES):
+// 비(0–20) / 구름(21–40) / 태양(41–60) / 바람(61–80) / 홍수(81–100)
+// 각 단계: { from, to, name, sublabel, icon(lucide), desc, action,
+//            glowColor, activeBg, borderGlow, iconColor, iconAnim }
+```
+
+- 카드 그리드: `grid grid-cols-5 gap-1.5`, 클릭 시 previewIdx 토글 (미리보기 모드)
+- 활성 카드: `scale(1.04)` + `glowColor` border + boxShadow, 비활성: `opacity:0.48`
+- `WeatherBgPattern`: 각 단계별 CSS 배경 애니메이션 (빗줄기/방사형글로우/햇살/시머/홍수)
+- 아이콘 애니메이션: `weather-rain-drop`, `weather-cloud-bob`, `weather-sun-spin`, `weather-wind-blow`, `weather-flood-pulse` (@keyframes in index.css)
+- 헤더: 좌=유동성 날씨 라벨, 우=점수(4xl mono)+sublabel — 항상 표시
+- 단계 설명 + action 권고문 + 지수 3개 그리드(S&P500/NASDAQ/KOSPI)
+- 레이아웃: 수직 스택 (`p-4 space-y-4`), 모바일/데스크톱 동일
+
+### Dashboard 전체 레이아웃 (Dashboard.tsx)
+```
+모바일: space-y-4 세로 스택
+데스크톱(lg+): grid grid-cols-[340px_1fr] gap-6
+  좌(340px fixed): 공포&탐욕 게이지 카드 + 경제 캘린더(lg:flex lg:flex-col flex-1 overflow scroll)
+  우(flex-1):      유동성 날씨 → 환율 → 금리 → 뉴스(lg:flex-1 overflow-y-auto)
+
+경제 캘린더:
+  - 데스크톱: 좌 컬럼 하단에 상시 표시 (hidden lg:flex)
+  - 모바일: 접힘 accordion (lg:hidden), calMobileOpen 상태, framer-motion height/opacity 애니메이션
+  - EconCalendarView: 이달 캘린더 그리드 + 날짜 클릭 → 해당 일 이벤트 목록
+  - EconCalendarList: impact 배지(고/중/저) + 실제값/예측/이전 비교
+  - 데이터: Finnhub /api/economic-calendar, 1시간 캐시
+```
 
 ### Analytics.tsx 도넛 차트 3종
 | 차트 | outerRadius | innerRadius | 비고 |
@@ -480,9 +563,13 @@ chat_anon boolean NOT NULL DEFAULT false
 - `cornerRadius={4}`, `paddingAngle={4}` 전체 적용
 - activeShape: 반투명 글로우 레이어(opacity 0.18) + 확장 레이어 2중 구조
 - 툴팁: `backdropFilter: blur(16px)` 유리 질감 + drop-shadow
-- 중앙 hover 디테일: 마우스오버 시 → 항목명(존 색상)+금액+비율 / 평상시 → 총합
-- `PieLabelInner` 제거 (얇은 링에 내부 레이블 불필요)
 - `animationDuration={1200}`, `animationEasing="ease-out"` 통일
+- 3개 차트는 `fundLoading` 해제 시 동시 마운트 (`chartsReady` 플래그로 제어)
+
+### Analytics.tsx MDD 섹션
+- accordion 구조: 헤더 버튼 클릭으로 펼침/접힘 (`mddOpen` 상태)
+- 기본 상태: 접힘 (closed). 사용자가 클릭해야 내용 표시
+- ChevronDown 아이콘 `rotate-180` 트랜지션으로 상태 표시
 
 ### Dashboard 폰트/여백 시스템
 - 페이지 제목: `text-2xl`, 날짜: `text-sm text-slate-500`
@@ -490,7 +577,6 @@ chat_anon boolean NOT NULL DEFAULT false
 - 환율·금리 핵심 수치: `text-lg font-bold tracking-tight`
 - 금리 항목 간격: `space-y-4`, 환율 행 높이: `py-3`
 - 뉴스: `text-slate-200`, 출처 `text-slate-500`
-- 그리드 gap: `md:gap-6`, 우측 컬럼 `md:space-y-4`
 
 ### RiskCenter.tsx ScoreGauge 폰트
 - 지표명(유동성 지수 등): `text-[10px]` → `text-xs`

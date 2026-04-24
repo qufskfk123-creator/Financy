@@ -36,6 +36,7 @@
   --gauge-baseline:    rgba(55, 65, 81, 0.40);
   --gauge-tick-dim:    rgba(75, 85, 99, 0.50);
   --gauge-edge-label:  rgba(107, 114, 128, 0.65);
+  --gauge-track:       rgba(31, 41, 55, 0.70);
   /* Market temp panel */
   --mtp-bg:            rgba(5, 10, 20, 0.78);
   --mtp-border:        rgba(100, 116, 139, 0.22);
@@ -84,6 +85,7 @@
   --gauge-baseline:    rgba(160, 160, 200, 0.45);
   --gauge-tick-dim:    rgba(100, 100, 150, 0.40);
   --gauge-edge-label:  rgba(100, 100, 150, 0.70);
+  --gauge-track:       rgba(91, 85, 204, 0.15);
   /* Market temp panel (light overrides) */
   --mtp-bg:            rgba(255, 255, 255, 0.85);
   --mtp-border:        rgba(91, 85, 204, 0.12);
@@ -330,6 +332,7 @@ aside.bg-gray-900 {
 
 [data-theme="light"] .hover\:bg-gray-800:hover { background-color: #F5F5FC; }
 [data-theme="light"] .hover\:bg-gray-700:hover { background-color: #EBEBF5; }
+[data-theme="light"] .hover\:bg-gray-800\/40:hover { background-color: rgba(0, 0, 0, 0.04); }
 
 /* Text → Pearl Indigo */
 [data-theme="light"] .text-white    { color: #0A0A18; }
@@ -378,6 +381,18 @@ aside.bg-gray-900 {
   color: #0A0A18;
 }
 [data-theme="light"] input::placeholder { color: #B2B2C8; }
+
+/* Slate text → Pearl Indigo (light) */
+[data-theme="light"] .text-slate-100  { color: #0A0A18; }
+[data-theme="light"] .text-slate-200  { color: #0A0A18; }
+[data-theme="light"] .text-slate-300  { color: #1A1A2E; }
+[data-theme="light"] .text-slate-400  { color: #1A1A2E; }
+[data-theme="light"] .text-slate-500  { color: #484868; }
+[data-theme="light"] .text-slate-600  { color: #6B6B8A; }
+
+[data-theme="light"] .hover\:text-slate-200:hover { color: #0A0A18; }
+[data-theme="light"] .hover\:text-slate-400:hover { color: #1A1A2E; }
+[data-theme="light"] .group:hover .group-hover\:text-white { color: #0A0A18; }
 
 /* Chart/status text overrides */
 [data-theme="light"] .text-blue-300   { color: #0052CC; }
@@ -444,3 +459,78 @@ aside.bg-gray-900 {
 
 .bg-neutral-badge              { background-color: rgba(202, 202, 222, 0.08); }
 [data-theme="light"] .bg-neutral-badge { background-color: rgba(26, 26, 46, 0.05); }
+
+/* ── RiskCenter: colored state panels (light mode boost) ───── */
+
+/* Bg alpha bumped: 8→13%, 10→18% so green/amber/red panels are visible on white card */
+[data-theme="light"] .bg-emerald-500\/10 { background-color: rgba(16, 185, 129, 0.18); }
+[data-theme="light"] .bg-emerald-500\/8  { background-color: rgba(16, 185, 129, 0.13); }
+[data-theme="light"] .bg-amber-500\/10   { background-color: rgba(245, 158, 11, 0.18); }
+[data-theme="light"] .bg-amber-500\/8    { background-color: rgba(245, 158, 11, 0.13); }
+[data-theme="light"] .bg-rose-500\/10    { background-color: rgba(239, 68, 68, 0.18); }
+[data-theme="light"] .bg-rose-500\/8     { background-color: rgba(239, 68, 68, 0.13); }
+[data-theme="light"] .bg-orange-500\/10  { background-color: rgba(249, 115, 22, 0.18); }
+
+/* Border alpha bumped for visibility on light bg */
+[data-theme="light"] .border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.38); }
+[data-theme="light"] .border-emerald-500\/25 { border-color: rgba(16, 185, 129, 0.32); }
+[data-theme="light"] .border-emerald-500\/20 { border-color: rgba(16, 185, 129, 0.28); }
+[data-theme="light"] .border-amber-500\/30   { border-color: rgba(245, 158, 11, 0.38); }
+[data-theme="light"] .border-amber-500\/25   { border-color: rgba(245, 158, 11, 0.32); }
+[data-theme="light"] .border-amber-500\/20   { border-color: rgba(245, 158, 11, 0.28); }
+[data-theme="light"] .border-rose-500\/30    { border-color: rgba(239, 68, 68, 0.38); }
+[data-theme="light"] .border-rose-500\/25    { border-color: rgba(239, 68, 68, 0.32); }
+[data-theme="light"] .border-orange-500\/25  { border-color: rgba(249, 115, 22, 0.32); }
+[data-theme="light"] .border-gray-800\/60    { border-color: rgba(91, 85, 204, 0.14); }
+
+/* Colored text — readable + vivid on light bg */
+[data-theme="light"] .text-emerald-300 { color: #059669; }
+[data-theme="light"] .text-emerald-400 { color: #10b981; }
+[data-theme="light"] .text-emerald-500 { color: #059669; }
+[data-theme="light"] .text-amber-400   { color: #d97706; }
+[data-theme="light"] .text-rose-300    { color: #dc2626; }
+[data-theme="light"] .text-rose-400    { color: #ef4444; }
+[data-theme="light"] .text-orange-400  { color: #ea580c; }
+
+/* ── Weather card animations (유동성 항해 기상 카드) ─────────── */
+@keyframes weather-rain-drop {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(5px); }
+}
+@keyframes weather-cloud-bob {
+  0%, 100% { transform: translateY(0); }
+  40%       { transform: translateY(-4px); }
+  70%       { transform: translateY(2px); }
+}
+@keyframes weather-sun-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes weather-wind-blow {
+  0%, 100% { transform: translateX(0); }
+  50%       { transform: translateX(7px); }
+}
+@keyframes weather-flood-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.22); }
+}
+@keyframes weather-bg-rain {
+  from { background-position: 0 -30px; }
+  to   { background-position: 0 30px; }
+}
+@keyframes weather-bg-glow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.12); }
+}
+@keyframes weather-bg-spin {
+  from { transform: rotate(0deg) translateX(-50%) translateY(-50%); }
+  to   { transform: rotate(360deg) translateX(-50%) translateY(-50%); }
+}
+@keyframes weather-bg-wind {
+  from { background-position: -100% 0; }
+  to   { background-position: 100% 0; }
+}
+@keyframes weather-bg-flood {
+  0%, 100% { opacity: 0.4; transform: scaleY(1) translateY(0); }
+  50%       { opacity: 0.75; transform: scaleY(1.08) translateY(-4px); }
+}

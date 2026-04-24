@@ -12,8 +12,8 @@
  *   · 뉴스         : RSS 파싱        → /api/market-news
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { motion, useAnimationFrame, AnimatePresence } from 'framer-motion'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw,
   TrendingUp,
@@ -27,9 +27,12 @@ import {
   AlertCircle,
   Waves,
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
+  CloudRain,
+  CloudSun,
+  Sun,
+  Wind,
+  Droplets,
 } from 'lucide-react'
 
 // ── 타입 ───────────────────────────────────────────────────
@@ -309,14 +312,16 @@ function parseNum(s: string | null): number | null {
 const IMPACT_STYLE: Record<string, { label: string; text: string; bg: string; dot: string }> = {
   High:   { label: '고', text: 'text-rose-400',   bg: 'bg-rose-500/15',   dot: 'bg-rose-400' },
   Medium: { label: '중', text: 'text-amber-400',  bg: 'bg-amber-500/15',  dot: 'bg-amber-400' },
-  Low:    { label: '저', text: 'text-slate-500',  bg: 'bg-slate-700/40',  dot: 'bg-slate-500' },
+  Low:    { label: '저', text: 'text-slate-500',  bg: 'bg-slate-500/15',  dot: 'bg-slate-400' },
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
 function EconCalendarView({ events, loading, error }: { events: EconEvent[]; loading: boolean; error?: string }) {
-  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const [viewDate, setViewDate] = useState(() => new Date())
+  const now      = useMemo(() => new Date(), [])
+  const todayKey = useMemo(() => now.toISOString().slice(0, 10), [now])
+  const year     = now.getFullYear()
+  const month    = now.getMonth()
   const [selectedKey, setSelectedKey] = useState<string | null>(todayKey)
 
   const eventsByDate = useMemo(() => {
@@ -328,9 +333,6 @@ function EconCalendarView({ events, loading, error }: { events: EconEvent[]; loa
     }
     return map
   }, [events])
-
-  const year  = viewDate.getFullYear()
-  const month = viewDate.getMonth()
 
   const cells = useMemo(() => {
     const firstWd = new Date(year, month, 1).getDay()
@@ -348,9 +350,7 @@ function EconCalendarView({ events, loading, error }: { events: EconEvent[]; loa
 
   if (loading) return (
     <div className="space-y-2.5">
-      <div className="flex justify-between items-center">
-        <Skel w="w-8 h-5" /><Skel w="w-20 h-4" /><Skel w="w-8 h-5" />
-      </div>
+      <div className="h-4 w-20 mx-auto rounded bg-gray-800 animate-pulse mb-2" />
       <div className="grid grid-cols-7 gap-1">
         {Array.from({ length: 35 }).map((_, i) => (
           <div key={i} className="aspect-square rounded-md bg-gray-800 animate-pulse" />
@@ -362,24 +362,10 @@ function EconCalendarView({ events, loading, error }: { events: EconEvent[]; loa
 
   return (
     <div>
-      {/* ── 월 네비게이션 ── */}
-      <div className="flex items-center justify-between mb-2.5">
-        <button
-          onClick={() => setViewDate(d => new Date(d.getFullYear(), d.getMonth() - 1))}
-          className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-gray-800 text-slate-400 hover:text-slate-200 transition-colors"
-        >
-          <ChevronLeft className="w-3.5 h-3.5" />
-        </button>
-        <span className="text-xs font-semibold text-slate-300 mono">
-          {year}년 {month + 1}월
-        </span>
-        <button
-          onClick={() => setViewDate(d => new Date(d.getFullYear(), d.getMonth() + 1))}
-          className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-gray-800 text-slate-400 hover:text-slate-200 transition-colors"
-        >
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      {/* ── 월 표시 (고정, 네비 없음) ── */}
+      <p className="text-xs font-semibold text-slate-300 mono text-center mb-2.5">
+        {year}년 {month + 1}월
+      </p>
 
       {/* ── 요일 헤더 ── */}
       <div className="grid grid-cols-7 text-center mb-1">
@@ -405,7 +391,6 @@ function EconCalendarView({ events, loading, error }: { events: EconEvent[]; loa
           return (
             <button
               key={dateKey}
-              onMouseEnter={() => { if (dayEvents.length > 0) setSelectedKey(dateKey) }}
               onClick={() => setSelectedKey(k => k === dateKey ? null : dateKey)}
               className={`
                 relative flex flex-col items-center justify-center gap-0.5
@@ -547,111 +532,128 @@ function EconCalendarList({ events, loading, error }: { events: EconEvent[]; loa
   )
 }
 
-// ── 유동성 항해 ───────────────────────────────────────────
+// ── 유동성 항해 (5단계 기상) ──────────────────────────────
 
-interface TankZone {
+interface WeatherStage {
   from: number; to: number
-  emoji: string; label: string; sublabel: string
+  name: string; sublabel: string
+  icon: React.ElementType
   desc: string; action: string
-  gradFrom: string; gradTo: string; glow: string
-  waveColor: string; waveAmp: number; waveSpeed: number
+  glowColor: string; activeBg: string; borderGlow: string
+  iconColor: string; iconAnim: string
 }
 
-const TANK_ZONES: TankZone[] = [
+const WEATHER_STAGES: WeatherStage[] = [
   {
-    from: 0,  to: 21,
-    emoji: '🌵', label: '고갈', sublabel: 'Dry',
+    from: 0, to: 21,
+    name: '비', sublabel: 'Rain',
+    icon: CloudRain,
     desc: '유동성이 바닥났습니다. 시장에서 자금이 급격히 이탈하며 거래량이 극도로 위축된 상태입니다.',
     action: '극단적 역발상 — 신중한 분할 진입 탐색',
-    gradFrom: '#b45309', gradTo: '#fbbf24', glow: 'rgba(180,83,9,0.6)',
-    waveColor: '#fde68a', waveAmp: 1.5, waveSpeed: 0.22,
+    glowColor: '#60a5fa',
+    activeBg: 'linear-gradient(135deg, rgba(30,58,138,0.90), rgba(23,37,84,0.95))',
+    borderGlow: 'rgba(96,165,250,0.50)',
+    iconColor: '#93c5fd', iconAnim: 'weather-rain-drop 1.1s ease-in-out infinite',
   },
   {
     from: 21, to: 41,
-    emoji: '🧊', label: '정체', sublabel: 'Stagnant',
-    desc: '유동성이 얼어붙어 있습니다. 매수·매도 모두 위축되고 시장이 방향을 잃은 상태입니다.',
+    name: '구름', sublabel: 'Cloudy',
+    icon: CloudSun,
+    desc: '유동성이 정체 상태입니다. 매수·매도 모두 위축되고 시장이 방향을 잃은 상태입니다.',
     action: '우량 자산 분할 매수 검토 시점',
-    gradFrom: '#1d4ed8', gradTo: '#93c5fd', glow: 'rgba(29,78,216,0.6)',
-    waveColor: '#bfdbfe', waveAmp: 2.5, waveSpeed: 0.38,
+    glowColor: '#a78bfa',
+    activeBg: 'linear-gradient(135deg, rgba(76,29,149,0.88), rgba(49,46,129,0.93))',
+    borderGlow: 'rgba(167,139,250,0.50)',
+    iconColor: '#c4b5fd', iconAnim: 'weather-cloud-bob 2.4s ease-in-out infinite',
   },
   {
     from: 41, to: 61,
-    emoji: '⛵', label: '순항', sublabel: 'Sailing',
-    desc: '유동성이 안정적으로 흐르고 있습니다. 시장이 균형 잡힌 항해 상태입니다.',
+    name: '태양', sublabel: 'Sunny',
+    icon: Sun,
+    desc: '유동성이 안정적으로 흐르고 있습니다. 시장이 균형 잡힌 상태입니다.',
     action: '추세 추종 전략 유효',
-    gradFrom: '#0ea5e9', gradTo: '#34d399', glow: 'rgba(14,165,233,0.6)',
-    waveColor: '#6ee7b7', waveAmp: 3.8, waveSpeed: 0.6,
+    glowColor: '#fbbf24',
+    activeBg: 'linear-gradient(135deg, rgba(72,56,0,0.92), rgba(100,78,0,0.96))',
+    borderGlow: 'rgba(251,191,36,0.55)',
+    iconColor: '#fde68a', iconAnim: 'weather-sun-spin 8s linear infinite',
   },
   {
     from: 61, to: 81,
-    emoji: '🏄', label: '가속', sublabel: 'Surging',
-    desc: '유동성이 빠르게 유입되고 있습니다. 강한 추세가 형성되며 모멘텀이 강해지고 있습니다.',
+    name: '바람', sublabel: 'Windy',
+    icon: Wind,
+    desc: '유동성이 빠르게 유입되고 있습니다. 강한 추세와 모멘텀이 형성되고 있습니다.',
     action: '추세 종목 비중 확대 검토',
-    gradFrom: '#4f46e5', gradTo: '#a78bfa', glow: 'rgba(79,70,229,0.65)',
-    waveColor: '#c4b5fd', waveAmp: 5.5, waveSpeed: 0.9,
+    glowColor: '#34d399',
+    activeBg: 'linear-gradient(135deg, rgba(6,78,59,0.88), rgba(4,120,87,0.93))',
+    borderGlow: 'rgba(52,211,153,0.50)',
+    iconColor: '#6ee7b7', iconAnim: 'weather-wind-blow 1.8s ease-in-out infinite',
   },
   {
     from: 81, to: 101,
-    emoji: '⚠️', label: '경보', sublabel: 'Alert',
-    desc: '유동성이 과잉 상태입니다. 시장이 과열되어 급격한 되돌림 리스크가 높아지고 있습니다.',
+    name: '홍수', sublabel: 'Flood',
+    icon: Droplets,
+    desc: '유동성 과잉 상태입니다. 시장이 과열되어 급격한 되돌림 리스크가 높아지고 있습니다.',
     action: '익절·리스크 관리 최우선',
-    gradFrom: '#dc2626', gradTo: '#f97316', glow: 'rgba(220,38,38,0.7)',
-    waveColor: '#fca5a5', waveAmp: 8, waveSpeed: 1.4,
+    glowColor: '#f87171',
+    activeBg: 'linear-gradient(135deg, rgba(127,29,29,0.90), rgba(153,27,27,0.95))',
+    borderGlow: 'rgba(248,113,113,0.50)',
+    iconColor: '#fca5a5', iconAnim: 'weather-flood-pulse 1.5s ease-in-out infinite',
   },
 ]
 
-function getTankZone(score: number): TankZone {
-  return TANK_ZONES.find(z => score < z.to) ?? TANK_ZONES[TANK_ZONES.length - 1]
+function getWeatherStageIdx(score: number): number {
+  const idx = WEATHER_STAGES.findIndex(s => score < s.to)
+  return idx < 0 ? WEATHER_STAGES.length - 1 : idx
 }
 
-function getTankZoneIdx(score: number): number {
-  const idx = TANK_ZONES.findIndex(z => score < z.to)
-  return idx < 0 ? TANK_ZONES.length - 1 : idx
-}
-
-// 실시간 SVG 파도 — useAnimationFrame으로 DOM 직접 업데이트 (리렌더 없음)
-function WaveLayer({ color, amplitude, speed }: { color: string; amplitude: number; speed: number }) {
-  const ref = useRef<SVGPathElement>(null)
-
-  useAnimationFrame((t) => {
-    if (!ref.current) return
-    const phase = (t / 1000) * speed * Math.PI * 2
-    const W = 400, H = 16
-    const pts = [`M0,${H}`]
-    for (let x = 0; x <= W; x += 5) {
-      const y = H / 2
-        + amplitude * Math.sin((x / W) * 3 * Math.PI * 2 + phase)
-        + amplitude * 0.4 * Math.sin((x / W) * 5 * Math.PI * 2 + phase * 0.75)
-      pts.push(`L${x},${Math.max(0, Math.min(H, y)).toFixed(1)}`)
-    }
-    pts.push(`L${W},${H}`, 'Z')
-    ref.current.setAttribute('d', pts.join(' '))
-  })
+// 카드별 CSS 배경 패턴 오버레이
+function WeatherBgPattern({ idx }: { idx: number }) {
+  const patterns: React.CSSProperties[] = [
+    // 비: 대각선 빗줄기
+    {
+      background: `repeating-linear-gradient(105deg, transparent 0px, transparent 7px, rgba(147,197,253,0.09) 7px, rgba(147,197,253,0.09) 8px)`,
+      animation: 'weather-bg-rain 1.0s linear infinite',
+    },
+    // 구름태양: 방사형 글로우 맥동
+    {
+      background: `radial-gradient(ellipse 110% 90% at 50% 10%, rgba(196,181,253,0.50) 0%, rgba(167,139,250,0.22) 45%, transparent 75%)`,
+      animation: 'weather-bg-glow 2.5s ease-in-out infinite',
+    },
+    // 태양: 상단 햇살 버스트
+    {
+      background: `radial-gradient(ellipse 120% 100% at 50% -5%, rgba(253,224,71,0.55) 0%, rgba(251,191,36,0.28) 40%, transparent 70%)`,
+      animation: 'weather-bg-glow 3s ease-in-out infinite',
+    },
+    // 바람: 수평 시머
+    {
+      backgroundImage: `repeating-linear-gradient(90deg, transparent 0%, rgba(52,211,153,0.28) 50%, transparent 100%)`,
+      backgroundSize: '200% 100%',
+      animation: 'weather-bg-wind 1.4s linear infinite',
+    },
+    // 홍수: 하단 물 차오름
+    {
+      background: `radial-gradient(ellipse 160% 100% at 50% 125%, rgba(248,113,113,0.60) 0%, rgba(239,68,68,0.30) 45%, transparent 70%)`,
+      animation: 'weather-bg-flood 1.6s ease-in-out infinite',
+    },
+  ]
 
   return (
-    <svg
-      viewBox="0 0 400 16"
-      preserveAspectRatio="none"
-      style={{
-        position: 'absolute',
-        top: -8,
-        left: 0,
-        right: 0,
-        width: '100%',
-        height: 16,
-        pointerEvents: 'none',
-        zIndex: 2,
-      }}
-    >
-      <path ref={ref} fill={color} opacity="0.2" />
-    </svg>
+    <div
+      className="absolute inset-0 pointer-events-none z-0 overflow-hidden rounded-xl"
+      style={patterns[idx]}
+    />
   )
 }
 
 function MarketTempCard({ data, loading }: { data: MarketStatusData | null; loading: boolean }) {
-  const score   = data?.score ?? 50
-  const zone    = getTankZone(score)
-  const zoneIdx = getTankZoneIdx(score)
+  const score     = data?.score ?? 50
+  const realIdx   = getWeatherStageIdx(score)
+  const [previewIdx, setPreviewIdx] = useState<number | null>(null)
+  const activeIdx = previewIdx ?? realIdx
+  const stage     = WEATHER_STAGES[activeIdx]
+  const displayScore = previewIdx !== null
+    ? `${WEATHER_STAGES[previewIdx].from}–${WEATHER_STAGES[previewIdx].to - 1}`
+    : String(score)
 
   return (
     <div
@@ -663,120 +665,108 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
         border: '0.5px solid var(--mtp-border)',
       }}
     >
-      {/* ── 헤더 + 디지털 수치 ── */}
+      {/* ── 헤더 + 점수 ── */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-1.5">
           <Waves
             className="w-3.5 h-3.5 flex-shrink-0"
-            style={{ color: loading ? '#475569' : zone.gradFrom }}
+            style={{ color: loading ? '#475569' : stage.glowColor }}
           />
-          <span className="text-xs font-semibold tracking-widest uppercase text-slate-400">
-            유동성 항해
-          </span>
+          <div>
+            <span className="text-xs font-semibold tracking-widest uppercase text-slate-400">
+              유동성 날씨
+            </span>
+            {previewIdx !== null && (
+              <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400">
+                미리보기
+              </span>
+            )}
+          </div>
         </div>
         {!loading && (
-          <div className="text-right leading-none">
-            <span className="font-mono font-bold text-2xl tracking-tight" style={{ color: zone.gradFrom }}>
-              {score}
-            </span>
-            <span className="font-mono text-xs text-slate-500 ml-0.5">pts</span>
-            <p
-              className="font-mono text-[10px] tracking-widest uppercase mt-1"
-              style={{ color: zone.gradFrom + 'aa' }}
-            >
-              {zone.sublabel}
+          <div className="text-right leading-none space-y-0.5">
+            <div className="flex items-baseline justify-end gap-0.5">
+              <span className="font-mono font-bold text-4xl tracking-tight leading-none" style={{ color: stage.glowColor }}>
+                {displayScore}
+              </span>
+              <span className="font-mono text-sm text-slate-500">pts</span>
+            </div>
+            <p className="font-mono text-sm font-semibold tracking-widest uppercase"
+              style={{ color: stage.glowColor + 'cc' }}>
+              {stage.sublabel}
             </p>
           </div>
         )}
       </div>
 
-      {/* ── 유리 수조 (Glass Tank) ── */}
+      {/* ── 5단계 기상 카드 그리드 ── */}
       {loading ? (
-        <div className="h-[108px] rounded-xl animate-pulse" style={{ background: 'var(--mtp-skel-bg)' }} />
+        <div className="h-[96px] rounded-xl animate-pulse" style={{ background: 'var(--mtp-skel-bg)' }} />
       ) : (
-        <div
-          className="relative h-[108px] rounded-xl overflow-hidden"
-          style={{
-            border: '1px solid var(--mtp-tank-border)',
-            background: 'var(--mtp-tank-bg)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
-            boxShadow: 'var(--mtp-tank-shadow)',
-          }}
-        >
-          {/* 물 채우기 + 파도 */}
-          <motion.div
-            className="absolute bottom-0 left-0 right-0"
-            initial={{ height: '0%' }}
-            animate={{ height: `${score}%` }}
-            transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
-            style={{
-              background: `linear-gradient(180deg, ${zone.gradTo}1b 0%, ${zone.gradTo}2a 100%)`,
-            }}
-          >
-            <WaveLayer color={zone.waveColor} amplitude={zone.waveAmp} speed={zone.waveSpeed} />
-          </motion.div>
-
-
-          {/* 수위 스케일 — 우측 */}
-          <div className="absolute right-1 inset-y-0 flex flex-col justify-between py-0.5 pointer-events-none z-[3]">
-            {[100, 75, 50, 25, 0].map(v => (
-              <span key={v} className="text-[7px] font-mono leading-none text-slate-300">{v}</span>
-            ))}
-          </div>
-
-          {/* 구역 레이블 오버레이 */}
-          <div className="absolute inset-0 flex z-[6]">
-            {TANK_ZONES.map((z, i) => {
-              const isActive = zoneIdx === i
-              return (
-                <div
-                  key={i}
-                  className="flex-1 flex flex-col items-center justify-center gap-1 relative"
+        <div className="grid grid-cols-5 gap-1.5">
+          {WEATHER_STAGES.map((s, i) => {
+            const isActive = activeIdx === i
+            const Icon = s.icon
+            return (
+              <button
+                key={i}
+                onClick={() => setPreviewIdx(prev => prev === i ? null : i)}
+                className="relative rounded-xl overflow-hidden flex flex-col items-center justify-center gap-1 py-3 cursor-pointer"
+                style={{
+                  minHeight: 88,
+                  background: isActive ? s.activeBg : 'var(--mtp-tank-bg)',
+                  border: isActive
+                    ? `1px solid ${s.borderGlow}`
+                    : '1px solid var(--mtp-tank-border)',
+                  boxShadow: isActive
+                    ? `0 0 18px ${s.borderGlow}, inset 0 0 14px ${s.glowColor}1a`
+                    : 'none',
+                  transform: isActive ? 'scale(1.04)' : 'scale(1)',
+                  opacity: isActive ? 1 : 0.48,
+                  zIndex: isActive ? 1 : 0,
+                  transition: 'transform 0.4s, opacity 0.4s, box-shadow 0.4s',
+                }}
+              >
+                <WeatherBgPattern idx={i} />
+                <Icon
+                  className="relative z-10 flex-shrink-0"
                   style={{
-                    borderRight: i < 4 ? '1px solid var(--mtp-zone-divider)' : 'none',
-                    opacity: isActive ? 1 : 0.3,
-                    transition: 'opacity 0.4s',
+                    width: 22,
+                    height: 22,
+                    color: isActive ? s.iconColor : 'rgba(148,163,184,0.45)',
+                    strokeWidth: 1.5,
+                    animation: isActive ? s.iconAnim : 'none',
+                    filter: isActive ? `drop-shadow(0 0 7px ${s.glowColor})` : 'none',
+                    transition: 'color 0.4s, filter 0.4s',
                   }}
-                >
+                />
+                <span
+                  className="relative z-10 text-[11px] font-bold leading-none text-center px-0.5"
+                  style={{
+                    color: isActive ? s.iconColor : 'rgba(148,163,184,0.40)',
+                    textShadow: isActive ? `0 0 8px ${s.glowColor}` : 'none',
+                    transition: 'color 0.4s',
+                  }}
+                >{s.name}</span>
+                {isActive && (
                   <span
-                    className="text-[26px] md:text-[33px] leading-none select-none"
-                    style={{
-                      filter: isActive ? `drop-shadow(0 0 8px ${z.waveColor}) drop-shadow(0 0 16px ${z.waveColor})` : 'none',
-                      transform: isActive ? 'scale(1.15)' : 'scale(1)',
-                      transition: 'filter 0.5s, transform 0.4s',
-                    }}
-                  >{z.emoji}</span>
-                  <span
-                    className="text-[13px] md:text-[16px] font-bold leading-none"
-                    style={{
-                      color: 'var(--mtp-zone-label)',
-                      textShadow: isActive ? `0 0 10px ${z.glow}` : 'none',
-                      transition: 'text-shadow 0.5s',
-                    }}
-                  >{z.label}</span>
-                  {isActive && (
-                    <span
-                      className="text-[12px] md:text-[14px] font-bold mono leading-none"
-                      style={{
-                        color: 'var(--mtp-zone-label)',
-                      }}
-                    >{score}pt</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+                    className="relative z-10 font-mono text-[10px] font-semibold leading-none"
+                    style={{ color: s.iconColor + 'cc' }}
+                  >{previewIdx !== null ? `${s.from}–${s.to - 1}` : `${score}pt`}</span>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
 
-      {/* ── 구역 설명 ── */}
+      {/* ── 단계 설명 ── */}
       {!loading && (
         <div className="space-y-2">
-          <p className="text-xs text-slate-400 leading-relaxed break-keep">{zone.desc}</p>
-          <div className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: zone.gradFrom }}>
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: zone.gradFrom }} />
-            {zone.action}
+          <p className="text-xs text-slate-400 leading-relaxed break-keep">{stage.desc}</p>
+          <div className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: stage.glowColor }}>
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: stage.glowColor }} />
+            {stage.action}
           </div>
         </div>
       )}
@@ -785,21 +775,15 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
       <div className="grid grid-cols-3 gap-2">
         {loading ? (
           [0, 1, 2].map(i => (
-            <div
-              key={i}
-              className="rounded-xl px-2.5 py-3 space-y-2 animate-pulse"
-              style={{ background: 'var(--mtp-skel-bg)', border: '0.5px solid var(--mtp-idx-border)' }}
-            >
+            <div key={i} className="rounded-xl px-2.5 py-3 space-y-2 animate-pulse"
+              style={{ background: 'var(--mtp-skel-bg)', border: '0.5px solid var(--mtp-idx-border)' }}>
               <Skel w="w-full" /><Skel w="w-2/3" />
             </div>
           ))
         ) : data?.indices && data.indices.length > 0 ? (
           data.indices.map(idx => (
-            <div
-              key={idx.ticker}
-              className="rounded-xl px-2.5 py-3 space-y-1"
-              style={{ background: 'var(--mtp-idx-bg)', border: '0.5px solid var(--mtp-idx-border)' }}
-            >
+            <div key={idx.ticker} className="rounded-xl px-2.5 py-3 space-y-1"
+              style={{ background: 'var(--mtp-idx-bg)', border: '0.5px solid var(--mtp-idx-border)' }}>
               <p className="text-xs text-slate-400 font-medium truncate">{idx.name}</p>
               <div className={`flex items-center gap-0.5 text-sm font-bold mono ${idx.changePercent >= 0 ? 'text-rise' : 'text-fall'}`}>
                 {idx.changePercent >= 0
@@ -916,7 +900,7 @@ export default function Dashboard() {
       {/* ── 헤더 ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-5 flex-shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100 tracking-tight">오늘의 투자 기상도</h1>
+          <h1 className="text-2xl font-bold text-gray-100 tracking-tight">오늘의 투자 날씨</h1>
           <p className="text-sm text-slate-500 mt-1">{today}</p>
         </div>
         <button
@@ -994,16 +978,14 @@ export default function Dashboard() {
 
         {/* 경제 캘린더 — 데스크톱 전용 */}
         <div className="card hidden lg:flex lg:flex-col flex-1 min-h-0">
-          <div className="flex items-center justify-between mb-3 flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="w-5 h-5 text-brand-400" />
-              <span className="text-base font-semibold text-slate-200 tracking-tight">경제 캘린더</span>
-            </div>
-            <span className="text-xs text-slate-500">FMP · 1h 캐시</span>
+          <div className="flex items-center gap-2 mb-3 flex-shrink-0">
+            <CalendarDays className="w-5 h-5 text-brand-400" />
+            <span className="text-base font-semibold text-slate-200 tracking-tight">경제 캘린더</span>
           </div>
           <div className="overflow-y-auto flex-1 min-h-0 pr-0.5">
             <EconCalendarView events={cal.events} loading={cal.loading} error={cal.error} />
           </div>
+          <p className="text-xs text-gray-700 mt-auto pt-4 flex-shrink-0">Finnhub · 1시간 캐시</p>
         </div>
 
         {/* 경제 캘린더 — 모바일 접힘 카드 (lg 미만) */}
@@ -1041,7 +1023,7 @@ export default function Dashboard() {
                 <div className="pt-4 border-t border-gray-800/50 mt-3">
                   <EconCalendarView events={cal.events} loading={cal.loading} error={cal.error} />
                 </div>
-                <p className="text-[10px] text-gray-700 pt-3">FMP · 1시간 캐시</p>
+                <p className="text-xs text-gray-700 pt-3">Finnhub · 1시간 캐시</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1051,7 +1033,7 @@ export default function Dashboard() {
         {/* ╚══════════════════════════════════════════════════╝ */}
 
         {/* ╔══ 우: 카드 열 ══════════════════════════════════╗ */}
-        <div className="space-y-4 lg:overflow-y-auto lg:min-h-0 lg:pr-1">
+        <div className="space-y-4 lg:space-y-0 lg:flex lg:flex-col lg:gap-4 lg:overflow-hidden lg:min-h-0 lg:pr-1">
 
           {/* ── 자금흐름 온도계 ── */}
           <MarketTempCard data={liq.data} loading={liq.loading} />
@@ -1153,7 +1135,7 @@ export default function Dashboard() {
           </div>
 
           {/* ── 글로벌 증시 뉴스 ── */}
-          <div className="card md:p-5">
+          <div className="card md:p-5 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
             <SectionTitle icon={Newspaper} title="글로벌 증시 뉴스" sub="실시간 헤드라인" />
 
             {news.loading ? (
@@ -1168,7 +1150,7 @@ export default function Dashboard() {
               <div className="divide-y divide-gray-800/70">
                 {/* 데스크톱: 4개, 모바일: 6개 */}
                 {news.items.slice(0, 6).map((item, i) => (
-                  <div key={i} className={`py-3.5 first:pt-0 last:pb-0 group ${i >= 4 ? 'lg:hidden' : ''}`}>
+                  <div key={i} className={`py-3.5 first:pt-0 last:pb-0 group ${i >= 5 ? 'lg:hidden' : ''}`}>
                     {item.link ? (
                       <a href={item.link} target="_blank" rel="noopener noreferrer"
                         className="flex items-start gap-2 group">
@@ -1196,14 +1178,15 @@ export default function Dashboard() {
             <p className="text-xs text-slate-600 mt-3">RSS · Reuters / CNBC / MarketWatch</p>
           </div>
 
-          {/* 하단 면책 문구 (모바일: 카드 아래 / 데스크톱: 우측 하단) */}
-          <p className="text-center text-xs text-gray-700 pb-2 md:pb-0">
-            모든 데이터는 무료 공개 API 기반 · 투자 참고용이며 투자 권유가 아닙니다
-          </p>
         </div>
         {/* ╚══════════════════════════════════════════════════╝ */}
 
       </div>
+
+      {/* 하단 면책 문구 — 전체 너비 중앙 정렬 */}
+      <p className="text-center text-xs text-gray-700 pt-3 pb-2 flex-shrink-0">
+        모든 데이터는 무료 공개 API 기반 · 투자 참고용이며 투자 권유가 아닙니다
+      </p>
 
     </div>
   )
