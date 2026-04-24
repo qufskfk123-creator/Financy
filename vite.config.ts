@@ -430,7 +430,7 @@ export default defineConfig(({ mode }) => {
             const url = `https://financialmodelingprep.com/api/v3/economic_calendar?from=${today}&to=${today}&apikey=${FMP_KEY}`
             const r = await fetch(url, { signal: AbortSignal.timeout(8_000) })
             if (!r.ok) throw new Error(`FMP ${r.status}`)
-            const raw: any[] = await r.json()
+            const raw = await r.json() as any[]
             const IMPACT_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
             const events = (Array.isArray(raw) ? raw : [])
               .map((e: any) => ({
