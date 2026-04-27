@@ -3,12 +3,13 @@
  * 자산 배분, 실현손익, 실시간 평가손익, 섹터 분석, 역사적 MDD 시뮬레이션
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   PieChart, Pie, Cell, Tooltip,
-  ResponsiveContainer, Sector,
+  ResponsiveContainer, Sector, Treemap,
 } from 'recharts'
-import { BarChart2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, Zap } from 'lucide-react'
+import type { TreemapNode } from 'recharts'
+import { BarChart2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, Zap, Lightbulb } from 'lucide-react'
 import type { Asset, MarketType } from './Portfolio'
 import type { SeedData } from '../lib/seed'
 import { fetchAssets } from '../lib/db'
@@ -384,6 +385,380 @@ function UpsideSection({ fundamentals }: { fundamentals: Map<string, Fundamental
   )
 }
 
+// ── Treemap ────────────────────────────────────────────────
+
+interface TreemapItem {
+  name: string
+  ticker: string | null
+  market: MarketType
+  krwValue: number
+  plPct: number | null
+  price: number | null
+  currency: 'KRW' | 'USD'
+  weight: number
+}
+
+function getPlFill(plPct: number | null): string {
+  if (plPct === null) return '#2d2d50'
+  if (plPct >= 20)   return '#166534'
+  if (plPct >= 10)   return '#15803d'
+  if (plPct >= 3)    return '#22c55e'
+  if (plPct >= 0)    return '#4ade80'
+  if (plPct >= -3)   return '#fca5a5'
+  if (plPct >= -10)  return '#f87171'
+  if (plPct >= -20)  return '#ef4444'
+  return '#b91c1c'
+}
+
+function getPlTextFill(plPct: number | null): string {
+  if (plPct === null) return '#9ca3af'
+  if (plPct >= 3)    return '#ffffff'
+  if (plPct >= 0)    return '#14532d'
+  if (plPct >= -3)   return '#7f1d1d'
+  return '#ffffff'
+}
+
+interface TooltipState { item: TreemapItem; x: number; y: number }
+
+function TreemapSection({ items }: { items: TreemapItem[] }) {
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const setTooltipRef = useRef(setTooltip)
+  setTooltipRef.current = setTooltip
+
+  const data = useMemo(
+    () => items.filter(i => i.krwValue > 0).map(i => ({ ...i, size: i.krwValue })),
+    [items],
+  )
+
+  const renderContent = useCallback((props: TreemapNode): React.ReactElement => {
+    const { x, y, width, height, name } = props
+    const plPct   = props.plPct as number | null
+    const weight  = (props.weight  as number) ?? 0
+    const ticker  = props.ticker   as string | null
+    const market  = props.market   as MarketType
+    const price   = props.price    as number | null
+    const currency= props.currency as 'KRW' | 'USD'
+    const krwValue= props.krwValue as number
+
+    const cellFill = getPlFill(plPct)
+    const textFill = getPlTextFill(plPct)
+    const showName = width > 44 && height > 28
+    const showPct  = width > 58 && height > 48
+    const fs = Math.min(12, Math.max(9, Math.floor(width / 7.5)))
+    const maxChars = Math.max(3, Math.floor(width / (fs * 0.62)))
+    const label = name.length > maxChars ? name.slice(0, maxChars - 1) + '…' : name
+
+    return (
+      <g key={`${name}-${x}-${y}`}>
+        <rect
+          x={x + 1} y={y + 1}
+          width={Math.max(0, width - 2)}
+          height={Math.max(0, height - 2)}
+          fill={cellFill}
+          rx={5}
+          style={{ cursor: 'default' }}
+          onMouseEnter={e =>
+            setTooltipRef.current({ item: { name, ticker, market, krwValue, plPct, price, currency, weight }, x: e.clientX, y: e.clientY })
+          }
+          onMouseMove={e =>
+            setTooltipRef.current(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)
+          }
+          onMouseLeave={() => setTooltipRef.current(null)}
+        />
+        {showName && (
+          <text
+            x={x + width / 2}
+            y={y + height / 2 - (showPct ? 8 : 0)}
+            textAnchor="middle" dominantBaseline="central"
+            fill={textFill} fontSize={fs} fontWeight="700"
+            fontFamily="Inter, system-ui, sans-serif"
+            style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            {label}
+          </text>
+        )}
+        {showPct && plPct !== null && (
+          <text
+            x={x + width / 2}
+            y={y + height / 2 + 10}
+            textAnchor="middle" dominantBaseline="central"
+            fill={textFill} fontSize={Math.max(8, fs - 2)}
+            fontFamily="JetBrains Mono, monospace"
+            style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            {plPct >= 0 ? '+' : ''}{plPct.toFixed(1)}%
+          </text>
+        )}
+      </g>
+    )
+  }, [])
+
+  if (data.length === 0) return null
+
+  return (
+    <div className="card relative">
+      <p className="text-sm font-semibold text-gray-200 mb-3">종목별 비중</p>
+      <div style={{ width: '100%', height: 228 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <Treemap
+            data={data}
+            dataKey="size"
+            nameKey="name"
+            content={renderContent}
+            isAnimationActive
+            animationDuration={900}
+            animationEasing="ease-out"
+          />
+        </ResponsiveContainer>
+      </div>
+      {/* 범례 */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3">
+        {([
+          { fill: '#22c55e', label: '수익' },
+          { fill: '#ef4444', label: '손실' },
+          { fill: '#2d2d50', label: '미조회' },
+        ] as const).map(({ fill, label }) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: fill }} />
+            <span className="text-[10px] text-gray-500">{label}</span>
+          </div>
+        ))}
+        <span className="ml-auto text-[10px] text-gray-600">크기 = 비중</span>
+      </div>
+      {/* 호버 툴팁 */}
+      {tooltip && (
+        <div className="fixed z-[9999] pointer-events-none"
+          style={{ left: tooltip.x + 14, top: tooltip.y - 10 }}>
+          <div style={{
+            background: 'rgba(8,8,22,0.95)',
+            backdropFilter: 'blur(18px)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            borderRadius: '14px',
+            color: '#F4F4FF',
+            fontSize: '12px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
+            padding: '10px 14px',
+            minWidth: '168px',
+          }}>
+            <p style={{ fontWeight: 700, fontSize: '13px', marginBottom: '2px' }}>{tooltip.item.name}</p>
+            <p style={{ color: '#9ca3af', fontSize: '11px', fontFamily: 'monospace', marginBottom: '7px' }}>
+              {tooltip.item.ticker ? `${tooltip.item.ticker} · ` : ''}{MARKET[tooltip.item.market].label}
+            </p>
+            {tooltip.item.price != null && (
+              <p style={{ fontFamily: 'monospace', marginBottom: '6px' }}>
+                {fmtMoney(tooltip.item.price, tooltip.item.currency)}
+              </p>
+            )}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.09)', paddingTop: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                <span style={{ color: '#9ca3af', fontSize: '11px' }}>포트폴리오 비중</span>
+                <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{tooltip.item.weight.toFixed(1)}%</span>
+              </div>
+              {tooltip.item.plPct !== null && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9ca3af', fontSize: '11px' }}>평가 수익률</span>
+                  <span style={{
+                    fontFamily: 'monospace', fontWeight: 700,
+                    color: tooltip.item.plPct >= 0 ? 'var(--rise)' : 'var(--fall)',
+                  }}>
+                    {fmtPct(tooltip.item.plPct)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Portfolio Insights ──────────────────────────────────────
+
+const SECTOR_KR: Record<string, string> = {
+  'Technology':            'IT·기술',
+  'Healthcare':            '헬스케어',
+  'Financial Services':    '금융',
+  'Consumer Cyclical':     '소비재(경기)',
+  'Industrials':           '산업재',
+  'Communication Services':'통신·미디어',
+  'Consumer Defensive':    '필수소비재',
+  'Energy':                '에너지',
+  'Basic Materials':       '소재·화학',
+  'Real Estate':           '부동산',
+  'Utilities':             '유틸리티',
+}
+
+interface InsightItem {
+  emoji: string
+  text: string
+  level: 'info' | 'warn' | 'ok' | 'bad'
+}
+
+const INSIGHT_STYLE: Record<InsightItem['level'], { bg: string; border: string }> = {
+  info: { bg: 'rgba(99,102,241,0.07)',  border: 'rgba(99,102,241,0.22)' },
+  warn: { bg: 'rgba(245,158,11,0.07)', border: 'rgba(245,158,11,0.22)' },
+  ok:   { bg: 'rgba(16,185,129,0.07)', border: 'rgba(16,185,129,0.22)' },
+  bad:  { bg: 'rgba(239,68,68,0.07)',  border: 'rgba(239,68,68,0.22)'  },
+}
+
+function PortfolioInsights({
+  treemapItems, byMarket, totalKrw, fundamentals, seed, krwRate, krwInvested, usdInvested, assetCount,
+}: {
+  treemapItems: TreemapItem[]
+  byMarket: Array<{ market: MarketType; krw: number }>
+  totalKrw: number
+  fundamentals: Map<string, Fundamentals>
+  seed: SeedData
+  krwRate: number
+  krwInvested: number
+  usdInvested: number
+  assetCount: number
+}) {
+  if (assetCount === 0 || totalKrw === 0) return null
+
+  const ins: InsightItem[] = []
+
+  // 1. 최대 비중 시장
+  const topMarket = [...byMarket].sort((a, b) => b.krw - a.krw)[0]
+  if (topMarket) {
+    const pct = (topMarket.krw / totalKrw) * 100
+    ins.push({
+      emoji: '📊',
+      text: `${MARKET[topMarket.market].label}에 가장 많이 투자 중이에요 (전체의 ${pct.toFixed(0)}%)`,
+      level: 'info',
+    })
+  }
+
+  // 2. 단일 종목 집중 위험
+  const topItem = [...treemapItems].sort((a, b) => b.weight - a.weight)[0]
+  if (topItem && topItem.weight > 40) {
+    ins.push({
+      emoji: '⚠️',
+      text: `'${topItem.name}'이(가) 포트폴리오의 ${topItem.weight.toFixed(0)}%를 차지해요. 종목 집중 위험을 점검해보세요`,
+      level: 'warn',
+    })
+  }
+
+  // 3. 가상자산 비중 경고
+  const cryptoGroup = byMarket.find(g => g.market === 'Crypto')
+  if (cryptoGroup && totalKrw > 0) {
+    const pct = (cryptoGroup.krw / totalKrw) * 100
+    if (pct > 35) {
+      ins.push({
+        emoji: '🔥',
+        text: `가상자산 비중이 ${pct.toFixed(0)}%예요. 가격 변동이 크니 위험 관리를 꼭 하세요`,
+        level: 'warn',
+      })
+    }
+  }
+
+  // 4. 현금 보유 분석
+  const seedKRW = seed.krw + seed.usd * krwRate
+  if (seedKRW > 0) {
+    const krwCash = seed.krw > 0 ? Math.max(0, seed.krw - krwInvested) : 0
+    const usdCash = seed.usd > 0 ? Math.max(0, seed.usd - usdInvested) : 0
+    const totalCashKrw = krwCash + usdCash * krwRate
+    const cashRatio = (totalCashKrw / seedKRW) * 100
+    if (cashRatio < 5) {
+      ins.push({
+        emoji: '💸',
+        text: `현금이 ${cashRatio.toFixed(0)}%밖에 없어요. 시장 급락 시 추가 매수 여력이 부족할 수 있어요`,
+        level: 'bad',
+      })
+    } else if (cashRatio < 15) {
+      ins.push({
+        emoji: '💰',
+        text: `현금 비중이 ${cashRatio.toFixed(0)}%예요. 15~30% 수준으로 여유 자금을 확보해두면 더 안전해요`,
+        level: 'info',
+      })
+    } else {
+      ins.push({
+        emoji: '✅',
+        text: `현금을 ${cashRatio.toFixed(0)}% 보유 중이에요. 시장 기회를 잡을 준비가 잘 되어 있어요`,
+        level: 'ok',
+      })
+    }
+  }
+
+  // 5. 수익·손실 톱 종목
+  const priced = treemapItems.filter(i => i.plPct !== null)
+  if (priced.length >= 2) {
+    const best  = priced.reduce((a, b) => (a.plPct! > b.plPct! ? a : b))
+    const worst = priced.reduce((a, b) => (a.plPct! < b.plPct! ? a : b))
+    if (best.plPct! > 5) {
+      ins.push({ emoji: '🚀', text: `가장 수익이 높은 종목은 '${best.name}' (${fmtPct(best.plPct!)})이에요`, level: 'ok' })
+    }
+    if (worst.plPct! < -5) {
+      ins.push({
+        emoji: '📉',
+        text: `'${worst.name}'이(가) ${fmtPct(worst.plPct!)}로 손실 중이에요. 손절이나 추가 매수를 검토해보세요`,
+        level: 'bad',
+      })
+    }
+  }
+
+  // 6. 투자 분야 (섹터) 분포
+  if (fundamentals.size >= 2) {
+    const sectorMap = new Map<string, number>()
+    for (const [, f] of fundamentals) {
+      if (f.sector) sectorMap.set(f.sector, (sectorMap.get(f.sector) ?? 0) + 1)
+    }
+    const sectorArr = Array.from(sectorMap.entries()).sort((a, b) => b[1] - a[1])
+    if (sectorArr.length > 0) {
+      const [topName, topCount] = sectorArr[0]
+      const topPct = (topCount / fundamentals.size) * 100
+      ins.push({
+        emoji: '🏭',
+        text: `가장 많이 투자된 분야는 '${SECTOR_KR[topName] ?? topName}'이에요 (${topCount}개 종목)${topPct > 65 ? ' — 분야 집중도가 높아요' : ''}`,
+        level: topPct > 65 ? 'warn' : 'info',
+      })
+    }
+    if (sectorArr.length >= 4) {
+      ins.push({
+        emoji: '🌐',
+        text: `${sectorArr.length}개 투자 분야에 고루 분산되어 있어요. 잘 관리된 포트폴리오예요`,
+        level: 'ok',
+      })
+    }
+  }
+
+  // 7. 종목 수 기반 분산도
+  if (assetCount <= 2) {
+    ins.push({
+      emoji: '📌',
+      text: `보유 종목이 ${assetCount}개예요. 다양한 종목에 투자하면 위험을 더 잘 분산할 수 있어요`,
+      level: 'info',
+    })
+  }
+
+  if (ins.length === 0) return null
+
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center gap-2">
+        <Lightbulb className="w-4 h-4 text-brand-400" />
+        <span className="text-sm font-semibold text-gray-200">포트폴리오 인사이트</span>
+        <span className="ml-auto text-[10px] text-gray-600">{ins.length}개 분석</span>
+      </div>
+      <div className="space-y-2">
+        {ins.slice(0, 6).map((item, i) => {
+          const s = INSIGHT_STYLE[item.level]
+          return (
+            <div key={i}
+              className="flex items-start gap-3 rounded-xl px-3 py-2.5"
+              style={{ background: s.bg, border: `1px solid ${s.border}` }}>
+              <span className="text-base leading-none flex-shrink-0 mt-0.5">{item.emoji}</span>
+              <p className="text-xs text-gray-300 leading-relaxed">{item.text}</p>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-[10px] text-gray-700 text-right">
+        실시간 시세 조회 종목만 수익률 기반 분석 가능
+      </p>
+    </div>
+  )
+}
+
 // ── Main Component ─────────────────────────────────────────
 
 export default function Analytics({ userId, seed }: { userId: string | null; seed: SeedData }) {
@@ -399,7 +774,6 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
 
   // pie hover state
   const [pieActiveIdx, setPieActiveIdx] = useState<number | undefined>(undefined)
-  const [barActiveIdx, setBarActiveIdx] = useState<number | undefined>(undefined)
 
   const hasAutoFetched = useRef(false)
 
@@ -492,6 +866,34 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
 
   const krwInvested = assets.reduce((s, a) => MARKET[a.market].currency === 'KRW' ? s + holdingCost(a) : s, 0)
   const usdInvested = assets.reduce((s, a) => MARKET[a.market].currency === 'USD' ? s + holdingCost(a) : s, 0)
+
+  // ── 트리맵 데이터 ─────────────────────────────────────────
+  const treemapItems = useMemo((): TreemapItem[] => {
+    const raw = assets.map(a => {
+      const ticker   = resolveTickerForAsset(a)
+      const hQty     = holdingQty(a)
+      if (hQty <= 0) return null
+      const avgCost_ = avgBuyPrice(a)
+      const costVal  = hQty * avgCost_
+      const currency = MARKET[a.market].currency
+      const krwCost  = currency === 'KRW' ? costVal : costVal * krwRate
+      const priceData = ticker ? livePrices.get(ticker) : null
+      let plPct: number | null = null
+      let krwValue = krwCost
+      let price: number | null = null
+      if (priceData && costVal > 0) {
+        price = priceData.price
+        const currentVal = hQty * priceData.price
+        plPct = ((currentVal - costVal) / costVal) * 100
+        krwValue = currency === 'KRW' ? currentVal : currentVal * krwRate
+      }
+      return { name: a.name, ticker, market: a.market, krwValue: Math.max(1, krwValue), plPct, price, currency, weight: 0 } satisfies TreemapItem
+    }).filter((x): x is TreemapItem => x !== null)
+
+    const total = raw.reduce((s, i) => s + i.krwValue, 0)
+    raw.forEach(i => { i.weight = total > 0 ? (i.krwValue / total) * 100 : 0 })
+    return raw
+  }, [assets, livePrices, krwRate])
   const krwSeedCash = seed.krw > 0 ? Math.max(0, seed.krw - krwInvested) : 0
   const usdSeedCash = seed.usd > 0 ? Math.max(0, seed.usd - usdInvested) : 0
   const seedKRW     = seed.krw + seed.usd * krwRate
@@ -704,52 +1106,16 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
               )}
             </div>
 
-            {/* ── 시장별 분포 ── */}
-            <div className="card">
-              <p className="text-sm font-semibold text-gray-200 mb-4">시장별 분포</p>
-              {!chartsReady ? <Skel h="h-[260px]" /> : (
-                <div style={{ width: '100%', height: 200, position: 'relative' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData} cx="50%" cy="50%" outerRadius={82} innerRadius={62}
-                        paddingAngle={4} dataKey="value" labelLine={false}
-                        animationBegin={0} animationDuration={1200} animationEasing="ease-out"
-                        {...({ cornerRadius: 4 } as object)}
-                        {...({ activeIndex: barActiveIdx, activeShape: renderActivePieShape } as object)}
-                        onMouseEnter={(_, index) => setBarActiveIdx(index)}
-                        onMouseLeave={() => setBarActiveIdx(undefined)}>
-                        {pieData.map((entry, index) => <Cell key={`bar-cell-${index}`} fill={entry.color} />)}
-                      </Pie>
-                      <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  {pieData.length > 0 && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-base font-bold mono text-gray-200">{pieData.length}</span>
-                      <span className="text-[10px] text-gray-500">시장</span>
-                    </div>
-                  )}
+            {/* ── 종목별 비중 (Treemap) ── */}
+            {!chartsReady
+              ? (
+                <div className="card">
+                  <p className="text-sm font-semibold text-gray-200 mb-3">종목별 비중</p>
+                  <Skel h="h-[268px]" />
                 </div>
-              )}
-              {chartsReady && (
-                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
-                  {pieData.map((entry, i) => {
-                    const pct = totalKrw > 0 ? (entry.value / totalKrw * 100).toFixed(1) : '0'
-                    return (
-                      <div key={i} className={`flex items-center gap-1.5 cursor-default transition-opacity ${barActiveIdx !== undefined && barActiveIdx !== i ? 'opacity-40' : 'opacity-100'}`}
-                        onMouseEnter={() => setBarActiveIdx(i)}
-                        onMouseLeave={() => setBarActiveIdx(undefined)}>
-                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                        <span className="text-xs text-gray-400">{entry.name}</span>
-                        <span className="text-xs text-gray-500 mono">{pct}%</span>
-                        <span className="text-[10px] text-gray-700 mono">{fmtMan(entry.value)}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+              )
+              : <TreemapSection items={treemapItems} />
+            }
 
             {/* ── 섹터 분포 ── */}
             {showSectorCol && (
@@ -767,6 +1133,19 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
         )
       })()}
 
+
+      {/* 포트폴리오 인사이트 */}
+      <PortfolioInsights
+        treemapItems={treemapItems}
+        byMarket={byMarket}
+        totalKrw={totalKrw}
+        fundamentals={fundamentals}
+        seed={seed}
+        krwRate={krwRate}
+        krwInvested={krwInvested}
+        usdInvested={usdInvested}
+        assetCount={assets.length}
+      />
 
       {/* 실시간 평가손익 */}
       {hasTickerAssets && (
