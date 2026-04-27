@@ -65,7 +65,7 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
         <div className="h-16 flex items-center justify-center lg:justify-between lg:px-6 border-b border-gray-800 flex-shrink-0">
           <div className="flex items-center justify-center lg:justify-start gap-2">
             <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center flex-shrink-0">
-              <Zap className="w-4 h-4 text-white" />
+              <Zap className="w-4 h-4" style={{ color: 'white' }} />
             </div>
             <span className="hidden lg:block font-semibold text-lg text-white tracking-tight">Financy</span>
           </div>
@@ -170,6 +170,7 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
         <div className="flex items-center justify-around px-2 pt-2 pb-2.5">
           {bottomNavItems.map(({ id, label, icon: Icon }) => {
             const active = currentPage === id
+            const isDashboard = id === 'dashboard'
             return (
               <button
                 key={id}
@@ -178,7 +179,16 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
                   active ? 'text-brand-400' : 'text-gray-500 active:text-gray-300'
                 }`}
               >
-                <Icon className={`w-6 h-6 ${active ? 'scale-110' : ''} transition-transform duration-150`} />
+                {isDashboard ? (
+                  <div
+                    className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 transition-transform duration-150 ${active ? 'scale-110' : ''}`}
+                    style={{ background: active ? '#6C63FF' : 'rgba(108,99,255,0.30)' }}
+                  >
+                    <Zap className="w-3.5 h-3.5" style={{ color: 'white' }} />
+                  </div>
+                ) : (
+                  <Icon className={`w-6 h-6 ${active ? 'scale-110' : ''} transition-transform duration-150`} />
+                )}
                 <span className="text-xs font-semibold">{label}</span>
               </button>
             )

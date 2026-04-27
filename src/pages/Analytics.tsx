@@ -5,11 +5,11 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
-  PieChart, Pie, Cell, Tooltip,
-  ResponsiveContainer, Sector, Treemap,
+  ResponsiveContainer, Treemap,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from 'recharts'
 import type { TreemapNode } from 'recharts'
-import { BarChart2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, Zap, Lightbulb } from 'lucide-react'
+import { BarChart2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, Zap, Lightbulb, X, SlidersHorizontal } from 'lucide-react'
 import type { Asset, MarketType } from './Portfolio'
 import type { SeedData } from '../lib/seed'
 import { fetchAssets } from '../lib/db'
@@ -95,18 +95,18 @@ const MARKET: Record<MarketType, { label: string; color: string; currency: 'KRW'
   'Cash':    { label: '현금',     color: '#10B981', currency: 'KRW' },
 }
 
-const SECTOR_COLORS: Record<string, string> = {
-  'Technology':            '#6366F1',
-  'Healthcare':            '#10B981',
-  'Financial Services':    '#F59E0B',
-  'Consumer Cyclical':     '#EF4444',
-  'Industrials':           '#3B82F6',
-  'Communication Services':'#8B5CF6',
-  'Consumer Defensive':    '#14B8A6',
-  'Energy':                '#F97316',
-  'Basic Materials':       '#84CC16',
-  'Real Estate':           '#EC4899',
-  'Utilities':             '#6B7280',
+const SECTOR_KR: Record<string, string> = {
+  'Technology':            'IT·기술',
+  'Healthcare':            '헬스케어',
+  'Financial Services':    '금융',
+  'Consumer Cyclical':     '소비재(경기)',
+  'Industrials':           '산업재',
+  'Communication Services':'통신·미디어',
+  'Consumer Defensive':    '필수소비재',
+  'Energy':                '에너지',
+  'Basic Materials':       '소재·화학',
+  'Real Estate':           '부동산',
+  'Utilities':             '유틸리티',
 }
 
 // ── Formatters ─────────────────────────────────────────────
@@ -240,80 +240,113 @@ function AnalyticsSeedCard({ seed, krwRate, krwInvested, usdInvested, krwCash, u
   )
 }
 
-// ── SectorSection ──────────────────────────────────────────
+// ── SectorRadarSection ─────────────────────────────────────
 
-function SectorSection({ fundamentals }: { fundamentals: Map<string, Fundamentals> }) {
-  const [activeIdx, setActiveIdx] = useState<number | undefined>(undefined)
-
+function SectorRadarSection({
+  fundamentals, treemapItems, activeFilter, onFilter,
+}: {
+  fundamentals: Map<string, Fundamentals>
+  treemapItems: TreemapItem[]
+  activeFilter: string | null
+  onFilter: (sector: string | null) => void
+}) {
   const sectorMap = new Map<string, number>()
-  for (const [, f] of fundamentals) {
-    if (!f.sector) continue
-    sectorMap.set(f.sector, (sectorMap.get(f.sector) ?? 0) + 1)
+  for (const item of treemapItems) {
+    if (!item.ticker) continue
+    const sector = fundamentals.get(item.ticker)?.sector
+    if (!sector) continue
+    sectorMap.set(sector, (sectorMap.get(sector) ?? 0) + item.krwValue)
   }
   if (sectorMap.size === 0) return null
 
-  const data = Array.from(sectorMap.entries()).map(([name, value]) => ({
-    name, value, color: SECTOR_COLORS[name] ?? '#6B7280',
+  const total = Array.from(sectorMap.values()).reduce((s, v) => s + v, 0)
+  const sectorArr = Array.from(sectorMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+
+  const THRESHOLD = 35
+  const balancedPct = 100 / sectorArr.length
+
+  const radarData = sectorArr.map(([name, value]) => ({
+    sector: SECTOR_KR[name] ?? name,
+    sectorEn: name,
+    pct: total > 0 ? (value / total) * 100 : 0,
+    balanced: balancedPct,
+    fullMark: 100,
   }))
-  const total = data.reduce((s, d) => s + d.value, 0)
-
-  const tooltipStyle = {
-    background: 'rgba(10,10,28,0.90)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255,255,255,0.09)',
-    borderRadius: '14px',
-    color: '#F4F4FF',
-    fontSize: '12px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-    padding: '9px 13px',
-  }
-
-  function renderActiveShape(props: any) {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
-    return (
-      <g>
-        <Sector cx={cx} cy={cy}
-          innerRadius={innerRadius - 4} outerRadius={outerRadius + 14}
-          startAngle={startAngle} endAngle={endAngle}
-          fill={fill} opacity={0.18} />
-        <Sector cx={cx} cy={cy}
-          innerRadius={innerRadius} outerRadius={outerRadius + 7}
-          startAngle={startAngle} endAngle={endAngle} fill={fill} />
-      </g>
-    )
-  }
 
   return (
     <div className="card">
-      <p className="text-sm font-semibold text-gray-200 mb-4">섹터 분포</p>
-      <div style={{ width: '100%', height: 180, position: 'relative' }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie data={data} cx="50%" cy="50%" outerRadius={70} innerRadius={54}
-              paddingAngle={4} dataKey="value" labelLine={false}
-              animationBegin={0} animationDuration={1200} animationEasing="ease-out"
-              {...({ cornerRadius: 4 } as object)}
-              {...({ activeIndex: activeIdx, activeShape: renderActiveShape } as object)}
-              onMouseEnter={(_, i) => setActiveIdx(i)}
-              onMouseLeave={() => setActiveIdx(undefined)}>
-              {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-            </Pie>
-            <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}개 종목`, '']} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-base font-bold mono text-gray-200">{total}</span>
-          <span className="text-[10px] text-gray-500">종목</span>
-        </div>
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-sm font-semibold text-gray-200">섹터 분포</p>
+        {activeFilter && (
+          <button onClick={() => onFilter(null)} className="flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors">
+            <X className="w-3 h-3" />필터 해제
+          </button>
+        )}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-2">
-        {data.map((entry, i) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-            <span className="text-[10px] text-gray-400">{entry.name}</span>
-            <span className="text-[10px] text-gray-600 mono">{((entry.value / total) * 100).toFixed(0)}%</span>
-          </div>
-        ))}
+      <p className="text-[10px] text-gray-600 mb-3">점선 = 이상적 균형 배분 · 섹터 클릭 시 종목 필터</p>
+      <div style={{ width: '100%', height: 210 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <RadarChart data={radarData} margin={{ top: 8, right: 24, bottom: 8, left: 24 }}>
+            <PolarGrid stroke="rgba(108,99,255,0.12)" />
+            <PolarAngleAxis
+              dataKey="sector"
+              tick={(props: any) => {
+                const { x, y, payload } = props
+                const item = radarData.find(d => d.sector === payload.value)
+                const isHigh = item ? item.pct > THRESHOLD : false
+                const isActive = item ? item.sectorEn === activeFilter : false
+                return (
+                  <text
+                    x={x} y={y}
+                    textAnchor="middle" dominantBaseline="middle"
+                    fill={isActive ? '#8B84FF' : isHigh ? '#f59e0b' : '#7878A0'}
+                    fontSize={9.5}
+                    fontWeight={isHigh || isActive ? '700' : '400'}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => onFilter(item ? (item.sectorEn === activeFilter ? null : item.sectorEn) : null)}>
+                    {isHigh ? '▲ ' : ''}{payload.value}
+                  </text>
+                )
+              }}
+            />
+            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+            <Radar name="균형 기준" dataKey="balanced"
+              stroke="rgba(108,99,255,0.30)" fill="transparent"
+              strokeDasharray="4 3" strokeWidth={1.5} />
+            <Radar name="내 포트폴리오" dataKey="pct"
+              stroke="#6C63FF" fill="rgba(108,99,255,0.22)"
+              strokeWidth={2}
+              {...({
+                dot: ({ cx, cy, payload }: any) => {
+                  const isHigh = payload.pct > THRESHOLD
+                  return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={isHigh ? 5 : 3}
+                    fill={isHigh ? '#f59e0b' : '#8B84FF'}
+                    stroke={isHigh ? '#f59e0b40' : 'transparent'} strokeWidth={4} />
+                }
+              } as object)}
+            />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex flex-wrap gap-1.5 mt-1">
+        {radarData.map(({ sector, sectorEn, pct }) => {
+          const isHigh = pct > THRESHOLD
+          const isActive = sectorEn === activeFilter
+          return (
+            <button key={sectorEn} onClick={() => onFilter(isActive ? null : sectorEn)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] transition-all"
+              style={{
+                background: isActive ? 'rgba(108,99,255,0.18)' : isHigh ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${isActive ? 'rgba(108,99,255,0.38)' : isHigh ? 'rgba(245,158,11,0.28)' : 'rgba(255,255,255,0.06)'}`,
+                color: isActive ? '#8B84FF' : isHigh ? '#f59e0b' : '#7878A0',
+              }}>
+              {sector}
+              <span className="opacity-60 mono ml-0.5">{pct.toFixed(0)}%</span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -398,8 +431,8 @@ interface TreemapItem {
   weight: number
 }
 
-function getPlFill(plPct: number | null): string {
-  if (plPct === null) return '#2d2d50'
+function getPlFill(plPct: number | null | undefined): string {
+  if (plPct == null) return '#2d2d50'
   if (plPct >= 20)   return '#166534'
   if (plPct >= 10)   return '#15803d'
   if (plPct >= 3)    return '#22c55e'
@@ -410,8 +443,8 @@ function getPlFill(plPct: number | null): string {
   return '#b91c1c'
 }
 
-function getPlTextFill(plPct: number | null): string {
-  if (plPct === null) return '#9ca3af'
+function getPlTextFill(plPct: number | null | undefined): string {
+  if (plPct == null) return '#9ca3af'
   if (plPct >= 3)    return '#ffffff'
   if (plPct >= 0)    return '#14532d'
   if (plPct >= -3)   return '#7f1d1d'
@@ -431,17 +464,24 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
   )
 
   const renderContent = useCallback((props: TreemapNode): React.ReactElement => {
+    const depth  = (props.depth as number) ?? 1
     const { x, y, width, height, name } = props
-    const plPct   = props.plPct as number | null
-    const weight  = (props.weight  as number) ?? 0
+
+    // recharts calls content for the root container node (depth=0) too — skip it
+    if (depth === 0 || width <= 0 || height <= 0) return <g key="skip" />
+
+    const plPct   = props.plPct   as number | null | undefined
+    const weight  = (props.weight  as number | undefined) ?? 0
     const ticker  = props.ticker   as string | null
     const market  = props.market   as MarketType
     const price   = props.price    as number | null
     const currency= props.currency as 'KRW' | 'USD'
-    const krwValue= props.krwValue as number
+    const krwValue= (props.krwValue as number | undefined) ?? 0
+    // normalise: treat undefined same as null
+    const plPctNum: number | null = (plPct == null) ? null : plPct
 
-    const cellFill = getPlFill(plPct)
-    const textFill = getPlTextFill(plPct)
+    const cellFill = getPlFill(plPctNum)
+    const textFill = getPlTextFill(plPctNum)
     const showName = width > 44 && height > 28
     const showPct  = width > 58 && height > 48
     const fs = Math.min(12, Math.max(9, Math.floor(width / 7.5)))
@@ -458,7 +498,7 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
           rx={5}
           style={{ cursor: 'default' }}
           onMouseEnter={e =>
-            setTooltipRef.current({ item: { name, ticker, market, krwValue, plPct, price, currency, weight }, x: e.clientX, y: e.clientY })
+            setTooltipRef.current({ item: { name, ticker, market, krwValue, plPct: plPctNum, price, currency, weight }, x: e.clientX, y: e.clientY })
           }
           onMouseMove={e =>
             setTooltipRef.current(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)
@@ -476,7 +516,7 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
             {label}
           </text>
         )}
-        {showPct && plPct !== null && (
+        {showPct && plPctNum != null && (
           <text
             x={x + width / 2}
             y={y + height / 2 + 10}
@@ -484,7 +524,7 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
             fill={textFill} fontSize={Math.max(8, fs - 2)}
             fontFamily="JetBrains Mono, monospace"
             style={{ pointerEvents: 'none', userSelect: 'none' }}>
-            {plPct >= 0 ? '+' : ''}{plPct.toFixed(1)}%
+            {plPctNum >= 0 ? '+' : ''}{plPctNum.toFixed(1)}%
           </text>
         )}
       </g>
@@ -571,21 +611,287 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
   )
 }
 
-// ── Portfolio Insights ──────────────────────────────────────
+// ── StackedBarAllocation ───────────────────────────────────
 
-const SECTOR_KR: Record<string, string> = {
-  'Technology':            'IT·기술',
-  'Healthcare':            '헬스케어',
-  'Financial Services':    '금융',
-  'Consumer Cyclical':     '소비재(경기)',
-  'Industrials':           '산업재',
-  'Communication Services':'통신·미디어',
-  'Consumer Defensive':    '필수소비재',
-  'Energy':                '에너지',
-  'Basic Materials':       '소재·화학',
-  'Real Estate':           '부동산',
-  'Utilities':             '유틸리티',
+function StackedBarAllocation({
+  byMarket, totalKrw, activeFilter, onFilter,
+}: {
+  byMarket: Array<{ market: MarketType; krw: number }>
+  totalKrw: number
+  activeFilter: MarketType | null
+  onFilter: (market: MarketType | null) => void
+}) {
+  const [hovered, setHovered] = useState<MarketType | null>(null)
+  if (totalKrw === 0 || byMarket.length === 0) return null
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-semibold text-gray-200">자산 배분</p>
+        {activeFilter && (
+          <button onClick={() => onFilter(null)}
+            className="ml-auto flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors">
+            <X className="w-3 h-3" />필터 해제
+          </button>
+        )}
+      </div>
+      {/* 스택드 바 */}
+      <div className="relative h-11 rounded-xl overflow-hidden flex" style={{ minWidth: 0 }}>
+        {byMarket.map(({ market, krw }) => {
+          const pct = (krw / totalKrw) * 100
+          const isActive = activeFilter === null || activeFilter === market
+          const isHovered = hovered === market
+          return (
+            <div key={market}
+              className="relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer select-none"
+              style={{
+                width: `${pct}%`,
+                background: MARKET[market].color,
+                opacity: isActive ? 1 : 0.25,
+                transform: isHovered ? 'scaleY(1.06)' : 'scaleY(1)',
+                minWidth: pct > 4 ? undefined : 0,
+              }}
+              onClick={() => onFilter(activeFilter === market ? null : market)}
+              onMouseEnter={() => setHovered(market)}
+              onMouseLeave={() => setHovered(null)}>
+              {pct >= 10 && (
+                <>
+                  <span className="text-[11px] font-bold text-white leading-none pointer-events-none">
+                    {MARKET[market].label}
+                  </span>
+                  <span className="text-[10px] text-white/80 mono pointer-events-none">
+                    {pct.toFixed(1)}%
+                  </span>
+                </>
+              )}
+              {pct >= 5 && pct < 10 && (
+                <span className="text-[10px] font-bold text-white mono pointer-events-none">
+                  {pct.toFixed(0)}%
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {/* 범례 칩 */}
+      <div className="flex flex-wrap gap-2">
+        {byMarket.map(({ market, krw }) => {
+          const pct = (krw / totalKrw) * 100
+          const isActive = activeFilter === null || activeFilter === market
+          const { color, label } = MARKET[market]
+          return (
+            <button key={market}
+              onClick={() => onFilter(activeFilter === market ? null : market)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] transition-all"
+              style={{
+                background: isActive ? `${color}16` : 'rgba(255,255,255,0.02)',
+                border: `1px solid ${isActive ? `${color}38` : 'rgba(255,255,255,0.05)'}`,
+                opacity: isActive ? 1 : 0.5,
+              }}>
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+              <span className="text-gray-300">{label}</span>
+              <span className="text-gray-500 mono">{pct.toFixed(1)}%</span>
+              <span className="text-gray-700 mono">{fmtMan(krw)}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
+
+// ── HeadlineInsight ────────────────────────────────────────
+
+function HeadlineInsight({
+  treemapItems, byMarket, totalKrw, fundamentals, fundLoading, assetCount,
+}: {
+  treemapItems: TreemapItem[]
+  byMarket: Array<{ market: MarketType; krw: number }>
+  totalKrw: number
+  fundamentals: Map<string, Fundamentals>
+  fundLoading: boolean
+  assetCount: number
+}) {
+  if (assetCount === 0 || totalKrw === 0) return null
+
+  let headline = ''
+  let level: 'ok' | 'warn' | 'bad' | 'info' = 'info'
+  let detail = ''
+
+  // 섹터 집중도 분석
+  const sectorMap = new Map<string, number>()
+  for (const item of treemapItems) {
+    if (!item.ticker) continue
+    const sector = fundamentals.get(item.ticker)?.sector
+    if (!sector) continue
+    sectorMap.set(sector, (sectorMap.get(sector) ?? 0) + item.krwValue)
+  }
+  const sectorArr = Array.from(sectorMap.entries()).sort((a, b) => b[1] - a[1])
+  const topSector = sectorArr[0]
+  const topSectorPct = topSector ? (topSector[1] / totalKrw) * 100 : 0
+
+  const topStock = [...treemapItems].sort((a, b) => b.weight - a.weight)[0]
+  const cryptoGroup = byMarket.find(g => g.market === 'Crypto')
+  const cryptoPct = cryptoGroup ? ((cryptoGroup.krw / totalKrw) * 100) : 0
+  const priced = treemapItems.filter(i => i.plPct != null)
+  const avgPl = priced.length > 0 ? priced.reduce((s, i) => s + i.plPct!, 0) / priced.length : null
+
+  if (!fundLoading && topSectorPct > 60 && topSector) {
+    headline = `${SECTOR_KR[topSector[0]] ?? topSector[0]} 섹터 비중이 ${topSectorPct.toFixed(0)}%로 집중되어 있어요`
+    level = 'warn'
+    detail = '하락장에 대비해 방어주나 다른 투자 분야로 비중을 분산하는 것을 추천드려요'
+  } else if (topStock && topStock.weight > 45) {
+    headline = `'${topStock.name}'이(가) 포트폴리오의 ${topStock.weight.toFixed(0)}%를 차지해요`
+    level = 'warn'
+    detail = '단일 종목 집중 시 해당 종목 이슈로 포트폴리오 전체가 흔들릴 수 있어요'
+  } else if (cryptoPct > 40) {
+    headline = `가상자산 비중이 ${cryptoPct.toFixed(0)}% — 높은 변동성에 주의하세요`
+    level = 'warn'
+    detail = '가상자산은 가격 변동이 크므로 전체 자산의 20~30% 이내로 관리하는 것이 좋아요'
+  } else if (avgPl != null && avgPl < -10) {
+    headline = `평균 평가손실 ${Math.abs(avgPl).toFixed(1)}% — 포지션 점검이 필요해요`
+    level = 'bad'
+    detail = '손실 중인 종목의 추가 매수 or 손절 기준을 다시 확인해보세요'
+  } else if (avgPl != null && avgPl > 10) {
+    headline = `평균 수익률 +${avgPl.toFixed(1)}% — 포트폴리오가 좋은 성과를 내고 있어요`
+    level = 'ok'
+    detail = '목표 수익률 도달 여부를 확인하고 비중 조절이나 익절 계획을 세워두면 좋아요'
+  } else if (!fundLoading && sectorArr.length >= 4) {
+    headline = `${sectorArr.length}개 투자 분야에 고루 분산 — 균형 잡힌 포트폴리오예요`
+    level = 'ok'
+    detail = '잘 분산된 포트폴리오는 특정 섹터 충격을 완충하는 역할을 해요'
+  } else {
+    const topMkt = [...byMarket].sort((a, b) => b.krw - a.krw)[0]
+    if (!topMkt) return null
+    headline = `${MARKET[topMkt.market].label}을 중심으로 운용 중이에요 (${((topMkt.krw / totalKrw) * 100).toFixed(0)}% 비중)`
+    level = 'info'
+    detail = '다양한 시장과 자산군으로 분산하면 리스크를 줄일 수 있어요'
+  }
+
+  const LC = {
+    ok:   { icon: '✅', border: 'rgba(16,185,129,0.25)',  bg: 'rgba(16,185,129,0.07)',  text: '#34d399' },
+    warn: { icon: '⚠️', border: 'rgba(245,158,11,0.25)', bg: 'rgba(245,158,11,0.07)', text: '#fbbf24' },
+    bad:  { icon: '🔴', border: 'rgba(239,68,68,0.25)',  bg: 'rgba(239,68,68,0.07)',  text: '#f87171' },
+    info: { icon: '💡', border: 'rgba(99,102,241,0.25)', bg: 'rgba(99,102,241,0.07)', text: '#818cf8' },
+  }
+  const lc = LC[level]
+
+  return (
+    <div className="rounded-2xl px-4 py-3.5"
+      style={{ background: lc.bg, border: `1px solid ${lc.border}` }}>
+      <div className="flex items-start gap-3">
+        <span className="text-xl leading-none flex-shrink-0 mt-0.5">{lc.icon}</span>
+        <div>
+          <p className="text-sm font-bold leading-snug" style={{ color: lc.text }}>{headline}</p>
+          {detail && <p className="text-xs text-gray-400 mt-1 leading-relaxed">{detail}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── FilteredAssetTable ─────────────────────────────────────
+
+function FilteredAssetTable({
+  assets, fundamentals, treemapItems, filterMarket, filterSector, onClear,
+}: {
+  assets: Asset[]
+  fundamentals: Map<string, Fundamentals>
+  treemapItems: TreemapItem[]
+  filterMarket: MarketType | null
+  filterSector: string | null
+  onClear: () => void
+}) {
+  const hasFilter = filterMarket !== null || filterSector !== null
+
+  const filtered = useMemo(() => {
+    return assets.filter(a => {
+      if (holdingQty(a) <= 0) return false
+      if (filterMarket) return a.market === filterMarket
+      if (filterSector) {
+        const ticker = resolveTickerForAsset(a)
+        if (!ticker) return false
+        return fundamentals.get(ticker)?.sector === filterSector
+      }
+      return true
+    }).sort((a, b) => {
+      const aItem = treemapItems.find(i => i.name === a.name)
+      const bItem = treemapItems.find(i => i.name === b.name)
+      return (bItem?.krwValue ?? 0) - (aItem?.krwValue ?? 0)
+    })
+  }, [assets, fundamentals, treemapItems, filterMarket, filterSector])
+
+  const filterLabel = filterMarket
+    ? MARKET[filterMarket].label
+    : filterSector ? (SECTOR_KR[filterSector] ?? filterSector) : null
+
+  if (!hasFilter && assets.every(a => holdingQty(a) <= 0)) return null
+
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center gap-2">
+        <SlidersHorizontal className="w-4 h-4 text-gray-500" />
+        <span className="text-sm font-semibold text-gray-200">보유 종목</span>
+        {hasFilter && filterLabel && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full"
+            style={{ background: 'rgba(108,99,255,0.12)', color: '#8B84FF', border: '1px solid rgba(108,99,255,0.22)' }}>
+            {filterLabel}
+          </span>
+        )}
+        {hasFilter && (
+          <button onClick={onClear}
+            className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors">
+            <X className="w-3 h-3" />전체 보기
+          </button>
+        )}
+        <span className="ml-auto text-[10px] text-gray-600">{filtered.length}개</span>
+      </div>
+      {filtered.length === 0 ? (
+        <p className="text-xs text-gray-600 text-center py-4">해당 필터에 맞는 보유 종목이 없어요</p>
+      ) : (
+        <div className="space-y-1.5">
+          {filtered.map(a => {
+            const tItem = treemapItems.find(i => i.name === a.name)
+            const ticker = resolveTickerForAsset(a)
+            const sector = ticker ? (fundamentals.get(ticker)?.sector ?? null) : null
+            const { color, label } = MARKET[a.market]
+            return (
+              <div key={a.id}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div className="w-1 h-9 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-200 font-medium truncate">{a.name}</span>
+                    {ticker && <span className="text-[10px] text-gray-600 mono flex-shrink-0">{ticker}</span>}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px]" style={{ color: `${color}BB` }}>{label}</span>
+                    {sector && <span className="text-[10px] text-gray-700">{SECTOR_KR[sector] ?? sector}</span>}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-semibold mono text-gray-200">
+                    {tItem ? fmtMan(tItem.krwValue) : '—'}
+                  </p>
+                  {tItem?.plPct != null ? (
+                    <p className={`text-[10px] mono ${tItem.plPct >= 0 ? 'text-rise' : 'text-fall'}`}>
+                      {fmtPct(tItem.plPct)}
+                    </p>
+                  ) : null}
+                  {tItem && (
+                    <p className="text-[10px] text-gray-600 mono">{tItem.weight.toFixed(1)}%</p>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Portfolio Insights ──────────────────────────────────────
 
 interface InsightItem {
   emoji: string
@@ -772,8 +1078,9 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
   const [fundamentals,  setFundamentals]  = useState<Map<string, Fundamentals>>(new Map())
   const [fundLoading,   setFundLoading]   = useState(true)
 
-  // pie hover state
-  const [pieActiveIdx, setPieActiveIdx] = useState<number | undefined>(undefined)
+  const [filterMarket, setFilterMarket] = useState<MarketType | null>(null)
+  const [filterSector, setFilterSector] = useState<string | null>(null)
+  const clearFilter = useCallback(() => { setFilterMarket(null); setFilterSector(null) }, [])
 
   const hasAutoFetched = useRef(false)
 
@@ -908,11 +1215,6 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
     }
   }).filter(g => g.krw > 0)
 
-  const pieData = byMarket.map(g => ({
-    name: MARKET[g.market].label, value: g.krw, color: MARKET[g.market].color,
-  }))
-
-
   const totalPL  = assets.reduce((s, a) => s + totalRealizedPL(a), 0)
   const totalInv = assets.reduce((s, a) => s + totalInvested(a), 0)
   const hasSells = assets.some(a => a.sells.length > 0)
@@ -954,22 +1256,6 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
   const hasSectorData   = Array.from(fundamentals.values()).some(f => f.sector)
   const showSectorCol   = hasTickerAssets && (fundLoading || hasSectorData)
 
-  // ── Active Pie Shape (글로우 레이어 + 확장) ────────────────
-  function renderActivePieShape(props: any) {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
-    return (
-      <g>
-        <Sector cx={cx} cy={cy}
-          innerRadius={innerRadius - 4} outerRadius={outerRadius + 16}
-          startAngle={startAngle} endAngle={endAngle}
-          fill={fill} opacity={0.18} />
-        <Sector cx={cx} cy={cy}
-          innerRadius={innerRadius} outerRadius={outerRadius + 8}
-          startAngle={startAngle} endAngle={endAngle} fill={fill} />
-      </g>
-    )
-  }
-
   // ── 로딩 스켈레톤 ──────────────────────────────────────────
   if (loading) {
     return (
@@ -1006,16 +1292,6 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
   }
 
   // ── 정상 렌더링 ────────────────────────────────────────────
-  const tooltipStyle = {
-    background: 'rgba(10,10,28,0.90)',
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255,255,255,0.09)',
-    borderRadius: '14px',
-    color: '#F4F4FF',
-    fontSize: '12px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-    padding: '9px 13px',
-  }
 
   return (
     <div className="px-4 py-5 md:px-6 md:py-6 space-y-5 max-w-5xl mx-auto">
@@ -1025,6 +1301,16 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
         <h1 className="text-xl font-semibold text-white">분석</h1>
         <p className="text-sm text-gray-500 mt-0.5">{assets.length}개 종목 · 포트폴리오 심층 분석</p>
       </div>
+
+      {/* 헤드라인 인사이트 — 최상단 */}
+      <HeadlineInsight
+        treemapItems={treemapItems}
+        byMarket={byMarket}
+        totalKrw={totalKrw}
+        fundamentals={fundamentals}
+        fundLoading={fundLoading}
+        assetCount={assets.length}
+      />
 
       {/* 요약 통계 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1052,83 +1338,47 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
         krwInvested={krwInvested} usdInvested={usdInvested}
         krwCash={krwSeedCash} usdCash={usdSeedCash} seedKRW={seedKRW} />
 
-      {/* 도넛 차트 3개 — 카드 쉘은 항상 나란히, 안의 차트는 fundLoading 해제 시 동시 표시 */}
-      {/* chartsReady=false: 카드 쉘 유지 + 내부 스켈레톤 / true: 도넛 차트 동시 마운트 */}
+      {/* 자산 배분 (스택드 바) */}
+      <StackedBarAllocation
+        byMarket={byMarket}
+        totalKrw={totalKrw}
+        activeFilter={filterMarket}
+        onFilter={m => { setFilterMarket(m); setFilterSector(null) }}
+      />
+
+      {/* 차트 2열: 종목별 비중 + 섹터 레이더 */}
       {(() => {
         const chartsReady = !fundLoading || !showSectorCol
         return (
-          <div className={`grid ${showSectorCol ? 'lg:grid-cols-3' : ''} md:grid-cols-2 gap-4`}>
-
-            {/* ── 자산 배분 ── */}
-            <div className="card">
-              <p className="text-sm font-semibold text-gray-200 mb-4">자산 배분</p>
-              {!chartsReady ? <Skel h="h-[260px]" /> : (
-                <div style={{ width: '100%', height: 200, position: 'relative' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData} cx="50%" cy="50%" outerRadius={82} innerRadius={62}
-                        paddingAngle={4} dataKey="value" labelLine={false}
-                        animationBegin={0} animationDuration={1200} animationEasing="ease-out"
-                        {...({ cornerRadius: 4 } as object)}
-                        {...({ activeIndex: pieActiveIdx, activeShape: renderActivePieShape } as object)}
-                        onMouseEnter={(_, index) => setPieActiveIdx(index)}
-                        onMouseLeave={() => setPieActiveIdx(undefined)}>
-                        {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                      </Pie>
-                      <Tooltip contentStyle={tooltipStyle} formatter={(value) => [fmtMan(Number(value)), '']} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  {pieData.length > 0 && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-sm font-bold mono text-gray-200">{fmtMan(totalKrw)}</span>
-                      <span className="text-[10px] text-gray-500">총 보유</span>
-                    </div>
-                  )}
-                </div>
-              )}
-              {chartsReady && (
-                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
-                  {pieData.map((entry, i) => {
-                    const pct = totalKrw > 0 ? (entry.value / totalKrw * 100).toFixed(1) : '0'
-                    return (
-                      <div key={i} className={`flex items-center gap-1.5 cursor-default transition-opacity ${pieActiveIdx !== undefined && pieActiveIdx !== i ? 'opacity-40' : 'opacity-100'}`}
-                        onMouseEnter={() => setPieActiveIdx(i)}
-                        onMouseLeave={() => setPieActiveIdx(undefined)}>
-                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                        <span className="text-xs text-gray-400">{entry.name}</span>
-                        <span className="text-xs text-gray-500 mono">{pct}%</span>
-                        <span className="text-[10px] text-gray-700 mono">{fmtMan(entry.value)}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* ── 종목별 비중 (Treemap) ── */}
-            {!chartsReady
-              ? (
+          <div className={`grid ${showSectorCol ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-4`}>
+            {/* 종목별 비중 (Treemap) */}
+            {chartsReady
+              ? <TreemapSection items={treemapItems} />
+              : (
                 <div className="card">
                   <p className="text-sm font-semibold text-gray-200 mb-3">종목별 비중</p>
                   <Skel h="h-[268px]" />
                 </div>
               )
-              : <TreemapSection items={treemapItems} />
             }
-
-            {/* ── 섹터 분포 ── */}
+            {/* 섹터 분포 (Radar) */}
             {showSectorCol && (
               !chartsReady
                 ? (
                   <div className="card">
-                    <p className="text-sm font-semibold text-gray-200 mb-4">섹터 분포</p>
-                    <Skel h="h-[220px]" />
+                    <p className="text-sm font-semibold text-gray-200 mb-3">섹터 분포</p>
+                    <Skel h="h-[280px]" />
                   </div>
                 )
-                : <SectorSection fundamentals={fundamentals} />
+                : (
+                  <SectorRadarSection
+                    fundamentals={fundamentals}
+                    treemapItems={treemapItems}
+                    activeFilter={filterSector}
+                    onFilter={s => { setFilterSector(s); setFilterMarket(null) }}
+                  />
+                )
             )}
-
           </div>
         )
       })()}
@@ -1145,6 +1395,16 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
         krwInvested={krwInvested}
         usdInvested={usdInvested}
         assetCount={assets.length}
+      />
+
+      {/* 보유 종목 필터 테이블 */}
+      <FilteredAssetTable
+        assets={assets}
+        fundamentals={fundamentals}
+        treemapItems={treemapItems}
+        filterMarket={filterMarket}
+        filterSector={filterSector}
+        onClear={clearFilter}
       />
 
       {/* 실시간 평가손익 */}

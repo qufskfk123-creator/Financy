@@ -20,7 +20,7 @@ import {
   TrendingDown,
   Minus,
   ExternalLink,
-  Activity,
+  Thermometer,
   DollarSign,
   BarChart2,
   Newspaper,
@@ -33,6 +33,8 @@ import {
   Sun,
   Wind,
   Droplets,
+  Snowflake,
+  Flame,
 } from 'lucide-react'
 
 // ── 타입 ───────────────────────────────────────────────────
@@ -92,166 +94,226 @@ interface EconEvent {
   actual:   string | null
 }
 
-// ── 순수 SVG 도넛 파이차트 ────────────────────────────────
+// ── 시장 체감 온도 ─────────────────────────────────────────
 
-/** 수치 표시 색상 */
-function getZoneColor(v: number): string {
-  if (v <= 20) return '#10b981'
-  if (v <= 40) return '#34d399'
-  if (v <= 60) return '#fbbf24'
-  if (v <= 80) return '#f97316'
-  return '#ef4444'
+function indexToTemp(v: number): number {
+  return Math.round((v / 100) * 70 - 20)
 }
 
-// 5개 세그먼트: 반원 왼쪽(180°)→오른쪽(360°), 시계 방향(CW=상단 통과)
-const SEMI_SEGS = [
-  { from: 180, to: 216, color: '#10b981', label: '극단 공포' },
-  { from: 216, to: 252, color: '#34d399', label: '공포'      },
-  { from: 252, to: 288, color: '#fbbf24', label: '중립'      },
-  { from: 288, to: 324, color: '#f97316', label: '탐욕'      },
-  { from: 324, to: 360, color: '#ef4444', label: '극단 탐욕' },
+interface TempStage {
+  from: number; to: number
+  name: string; sublabel: string
+  icon: React.ElementType
+  prescription: string
+  color: string
+  liquidColor: string
+  glowColor: string
+  iconAnim: string
+}
+
+const TEMP_STAGES: TempStage[] = [
+  {
+    from: 0, to: 21,
+    name: '한파', sublabel: 'Polar Vortex',
+    icon: Snowflake,
+    prescription: '시장이 극단적 공포에 빠져 있습니다. 신중한 분할 진입으로 저가 기회를 탐색하세요.',
+    color: '#60a5fa', liquidColor: '#3b82f6', glowColor: '#60a5fa',
+    iconAnim: 'weather-sun-spin 5s linear infinite',
+  },
+  {
+    from: 21, to: 41,
+    name: '흐림', sublabel: 'Overcast',
+    icon: CloudSun,
+    prescription: '시장이 방향을 잃고 위축된 상태입니다. 우량 자산 분할 매수를 검토하세요.',
+    color: '#a78bfa', liquidColor: '#8b5cf6', glowColor: '#a78bfa',
+    iconAnim: 'weather-cloud-bob 2.4s ease-in-out infinite',
+  },
+  {
+    from: 41, to: 61,
+    name: '쾌적', sublabel: 'Pleasant',
+    icon: Sun,
+    prescription: '시장이 균형 상태입니다. 추세에 따라 포지션을 유지·조정하세요.',
+    color: '#34d399', liquidColor: '#10b981', glowColor: '#34d399',
+    iconAnim: 'weather-sun-spin 8s linear infinite',
+  },
+  {
+    from: 61, to: 81,
+    name: '따뜻', sublabel: 'Warm',
+    icon: Wind,
+    prescription: '시장이 과열 조짐을 보입니다. 추세 비중 확대와 리스크 관리를 병행하세요.',
+    color: '#fbbf24', liquidColor: '#f59e0b', glowColor: '#fbbf24',
+    iconAnim: 'weather-wind-blow 1.8s ease-in-out infinite',
+  },
+  {
+    from: 81, to: 101,
+    name: '폭염', sublabel: 'Heatwave',
+    icon: Flame,
+    prescription: '시장이 극단적으로 과열되어 있습니다. 익절·리스크 관리를 최우선으로 하세요.',
+    color: '#f87171', liquidColor: '#ef4444', glowColor: '#f87171',
+    iconAnim: 'weather-flood-pulse 1.5s ease-in-out infinite',
+  },
 ]
 
-function getActiveSeg(v: number) {
-  if (v <= 20) return 0
-  if (v <= 40) return 1
-  if (v <= 60) return 2
-  if (v <= 80) return 3
-  return 4
+function getTempStageIdx(v: number): number {
+  const idx = TEMP_STAGES.findIndex(s => v < s.to)
+  return idx < 0 ? TEMP_STAGES.length - 1 : idx
 }
 
-function fp(n: number) { return n.toFixed(2) }
+const TUBE_H = 180
+const BULB_D = 40
+const SCALE_MARKS = [
+  { temp: 50,  pct: 100,           highlight: false },
+  { temp: 20,  pct: (40 / 70) * 100, highlight: false },
+  { temp: 0,   pct: (20 / 70) * 100, highlight: true  },
+  { temp: -20, pct: 0,             highlight: false },
+]
 
-// 반원 호(arc) 경로 계산 — sweep=1(CW)로 상단 통과
-function semiArcPath(cx: number, cy: number, r1: number, r2: number, fromDeg: number, toDeg: number, gap = 3): string {
-  const toR = (d: number) => (d * Math.PI) / 180
-  const a = toR(fromDeg + gap / 2), b = toR(toDeg - gap / 2)
-  const x1 = cx + r2 * Math.cos(a), y1 = cy + r2 * Math.sin(a)
-  const x2 = cx + r2 * Math.cos(b), y2 = cy + r2 * Math.sin(b)
-  const x3 = cx + r1 * Math.cos(b), y3 = cy + r1 * Math.sin(b)
-  const x4 = cx + r1 * Math.cos(a), y4 = cy + r1 * Math.sin(a)
-  return `M${fp(x1)} ${fp(y1)} A${r2} ${r2} 0 0 1 ${fp(x2)} ${fp(y2)} L${fp(x3)} ${fp(y3)} A${r1} ${r1} 0 0 0 ${fp(x4)} ${fp(y4)}Z`
-}
-
-function FearGreedGauge({ value, loading }: { value: number; loading: boolean }) {
-  const CX = 100, CY = 100
-  const R1 = 62, R2 = 82
-  const activeSeg = getActiveSeg(value)
-  const color     = getZoneColor(value)
+function MarketThermometer({ value, loading }: { value: number; loading: boolean }) {
+  const stageIdx = getTempStageIdx(value)
+  const stage    = TEMP_STAGES[stageIdx]
+  const temp     = indexToTemp(value)
+  const Icon     = stage.icon
 
   return (
-    <div className="w-full select-none" aria-label={`공포 탐욕 지수: ${value}`}>
-      <svg viewBox="0 0 200 108" className="w-full max-w-[280px] mx-auto">
-        <defs>
-          <filter id="gauge-seg-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="5" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
-        </defs>
+    <div className="w-full select-none">
+      {/* ── 온도계 + 눈금 ── */}
+      <div className="flex items-end justify-center gap-3 mb-5">
 
-        {/* 배경 반원 (로딩) */}
-        {loading && (
-          <path
-            d={`M${CX - R2} ${CY} A${R2} ${R2} 0 0 1 ${CX + R2} ${CY}Z`}
-            fill="#1f2937" opacity="0.5"
-          />
-        )}
+        {/* 튜브 */}
+        <div className="flex flex-col items-center">
+          {/* 상단 캡 */}
+          <div style={{
+            width: 18, height: 9,
+            borderRadius: '9px 9px 0 0',
+            background: 'rgba(255,255,255,0.07)',
+            border: '1.5px solid rgba(255,255,255,0.13)',
+            borderBottom: 'none',
+          }} />
 
-        {/* 세그먼트 — 활성 구간: scale spring 튕김 + 네온 글로우 */}
-        {!loading && SEMI_SEGS.map((seg, i) => {
-          const active = activeSeg === i
-          return (
-            <g key={i} style={{
-              transformOrigin: `${CX}px ${CY}px`,
-              transform: active ? 'scale(1.07)' : 'scale(1)',
-              transition: 'transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            }}>
-              {active && (
-                <path
-                  d={semiArcPath(CX, CY, R1, R2, seg.from, seg.to)}
-                  fill={seg.color}
-                  opacity={0.35}
-                  filter="url(#gauge-seg-glow)"
-                />
-              )}
-              <path
-                d={semiArcPath(CX, CY, R1, R2, seg.from, seg.to)}
-                fill={seg.color}
-                opacity={active ? 1 : 0.22}
-                style={{ transition: 'opacity 0.4s' }}
-              />
-            </g>
-          )
-        })}
+          {/* 튜브 바디 */}
+          <div
+            className="relative overflow-hidden"
+            style={{
+              width: 18,
+              height: TUBE_H,
+              background: 'rgba(255,255,255,0.04)',
+              borderLeft: '1.5px solid rgba(255,255,255,0.13)',
+              borderRight: '1.5px solid rgba(255,255,255,0.13)',
+            }}
+          >
+            <div
+              className="absolute inset-y-0 pointer-events-none"
+              style={{ left: 3, width: 2, background: 'rgba(255,255,255,0.06)' }}
+            />
+            <motion.div
+              className="absolute bottom-0 left-0 right-0"
+              initial={{ height: 0 }}
+              animate={{ height: loading ? '12%' : `${Math.max(2, value)}%` }}
+              transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                background: loading
+                  ? '#374151'
+                  : `linear-gradient(to top, ${stage.liquidColor}, ${stage.color}cc)`,
+                boxShadow: loading ? 'none' : `0 0 12px ${stage.glowColor}50`,
+              }}
+            />
+          </div>
 
-        {/* 중앙 원 배경 */}
-        <circle cx={CX} cy={CY} r={R1 - 2} style={{ fill: 'var(--gauge-panel-fill)' }} />
+          {/* 구근 */}
+          <motion.div
+            className="relative flex-shrink-0"
+            style={{
+              width: BULB_D, height: BULB_D,
+              borderRadius: '50%',
+              marginTop: -2,
+              border: '1.5px solid rgba(255,255,255,0.14)',
+            }}
+            animate={{
+              backgroundColor: loading ? '#374151' : stage.liquidColor,
+              boxShadow: loading ? 'none' : `0 0 24px ${stage.glowColor}70`,
+            }}
+            transition={{ duration: 0.7 }}
+          >
+            <div className="absolute" style={{ top: 7, left: 7, width: 9, height: 9, borderRadius: '50%', background: 'rgba(255,255,255,0.38)' }} />
+          </motion.div>
+        </div>
 
-        {/* 중앙 상태 레이블 (점수는 카드 아래에 표시되므로 상태명만) */}
-        {loading ? (
-          <rect x="68" y="68" width="64" height="18" rx="6" fill="#1f2937" opacity="0.55" />
-        ) : (
-          <>
-            <text x={CX} y={CY - 23} textAnchor="middle" dominantBaseline="middle"
-              fontSize="12" fontWeight="700" fontFamily="sans-serif"
-              style={{ fill: color, stroke: 'var(--gauge-halo)', strokeWidth: 3, paintOrder: 'stroke fill' }}>
-              {SEMI_SEGS[activeSeg].label}
-            </text>
-          </>
-        )}
+        {/* 눈금 */}
+        <div className="relative" style={{ height: TUBE_H + BULB_D, width: 68 }}>
+          {SCALE_MARKS.map(({ temp: t, pct, highlight }) => {
+            const bottom = BULB_D / 2 + (pct / 100) * TUBE_H
+            return (
+              <div
+                key={t}
+                className="absolute left-0 flex items-center gap-1.5"
+                style={{ bottom, transform: 'translateY(50%)' }}
+              >
+                <div style={{
+                  width: highlight ? 10 : 6,
+                  height: highlight ? 1.5 : 1,
+                  background: highlight ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)',
+                }} />
+                <span className={`mono leading-none ${highlight ? 'text-slate-300 text-[11px] font-semibold' : 'text-slate-600 text-[10px]'}`}>
+                  {t > 0 ? '+' : ''}{t}°C
+                </span>
+              </div>
+            )
+          })}
 
-        {/* 틱 마크 — 20 / 40 / 60 / 80 */}
-        {!loading && [20, 40, 60, 80].map(v => {
-          const angle = (180 + (v / 100) * 180) * Math.PI / 180
-          const c = Math.cos(angle), s = Math.sin(angle)
-          return (
-            <line key={v}
-              x1={(CX + (R2 + 1) * c).toFixed(1)} y1={(CY + (R2 + 1) * s).toFixed(1)}
-              x2={(CX + (R2 + 5) * c).toFixed(1)} y2={(CY + (R2 + 5) * s).toFixed(1)}
-              style={{ stroke: 'var(--gauge-tick-dim)', strokeWidth: 1.2 }} />
-          )
-        })}
-
-        {/* 0 / 50 / 100 엔드 라벨 */}
-        {!loading && <>
-          <text x={CX - R2 - 1} y={CY + 7} textAnchor="middle" fontSize="7"
-            fontFamily="ui-monospace,monospace" style={{ fill: 'var(--gauge-edge-label)' }}>0</text>
-          <text x={CX} y={CY + 7} textAnchor="middle" fontSize="7"
-            fontFamily="ui-monospace,monospace" style={{ fill: 'var(--gauge-edge-label)' }}>50</text>
-          <text x={CX + R2 + 1} y={CY + 7} textAnchor="middle" fontSize="7"
-            fontFamily="ui-monospace,monospace" style={{ fill: 'var(--gauge-edge-label)' }}>100</text>
-        </>}
-      </svg>
-
-      <div className="flex justify-between px-4 mt-5">
-        <span className="text-xs font-bold text-emerald-400">← 공포</span>
-        <span className="text-xs font-bold text-red-400">탐욕 →</span>
+          {/* 현재 온도 인디케이터 */}
+          {!loading && (
+            <motion.div
+              className="absolute left-0 flex items-center gap-1.5"
+              initial={{ bottom: BULB_D / 2 }}
+              animate={{ bottom: BULB_D / 2 + (Math.max(0, Math.min(100, value)) / 100) * TUBE_H }}
+              transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
+              style={{ transform: 'translateY(50%)', zIndex: 10 }}
+            >
+              <div style={{
+                width: 16, height: 2, borderRadius: 1,
+                background: stage.glowColor,
+                boxShadow: `0 0 8px ${stage.glowColor}`,
+              }} />
+              <span className="mono text-[11px] font-bold leading-none" style={{ color: stage.color }}>
+                {temp > 0 ? '+' : ''}{temp}°
+              </span>
+            </motion.div>
+          )}
+        </div>
       </div>
+
+      {/* ── 단계 표시 ── */}
+      {loading ? (
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-12 w-28 rounded-xl bg-gray-800 animate-pulse" />
+          <div className="h-4 w-36 rounded bg-gray-800 animate-pulse" />
+        </div>
+      ) : (
+        <motion.div
+          key={stageIdx}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          className="flex flex-col items-center gap-2"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="text-5xl font-bold mono leading-none" style={{ color: stage.color }}>
+              {temp > 0 ? '+' : ''}{temp}°C
+            </span>
+            <Icon style={{
+              width: 28, height: 28,
+              color: stage.color,
+              filter: `drop-shadow(0 0 8px ${stage.glowColor})`,
+              animation: stage.iconAnim,
+            }} />
+          </div>
+          <p className="text-sm font-semibold tracking-wider" style={{ color: stage.color + 'b0' }}>
+            {stage.name} · {stage.sublabel}
+          </p>
+        </motion.div>
+      )}
     </div>
   )
-}
-
-// ── 투자 판단 상태 ─────────────────────────────────────────
-
-function getStatus(value: number) {
-  if (value <= 35) return {
-    label: '매수 적기',
-    desc:  '시장이 공포에 빠져 있습니다.\n좋은 종목을 싸게 살 기회일 수 있어요.',
-    badge: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-    dot:   'bg-emerald-400',
-  } as const
-  if (value <= 65) return {
-    label: '관망',
-    desc:  '시장이 중립 상태입니다.\n추가 신호를 기다리며 신중하게 지켜보세요.',
-    badge: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-    dot:   'bg-amber-400',
-  } as const
-  return {
-    label: '위험',
-    desc:  '시장이 과열되어 있습니다.\n신규 매수보다 리스크 관리에 집중하세요.',
-    badge: 'bg-rose-500/10 border-rose-500/30 text-rose-400',
-    dot:   'bg-rose-400',
-  } as const
 }
 
 // ── 포맷 헬퍼 ─────────────────────────────────────────────
@@ -876,9 +938,9 @@ export default function Dashboard() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
-  const fgValue     = fg.data?.value ?? 50
-  const status      = getStatus(fgValue)
-  const tnxPrice    = tnx.data?.price ?? 0
+  const fgValue  = fg.data?.value ?? 50
+  const fgStage  = TEMP_STAGES[getTempStageIdx(fgValue)]
+  const tnxPrice = tnx.data?.price ?? 0
   const irxPrice    = irx.data?.price ?? 0
   const yieldSpread = tnxPrice - irxPrice
   const curveStatus = irxPrice === 0 ? null
@@ -927,52 +989,46 @@ export default function Dashboard() {
         {/* ╔══ 좌: 게이지 + 경제 캘린더 (데스크톱) ═══════════╗ */}
         <div className="flex flex-col gap-4 lg:min-h-0 lg:overflow-hidden">
 
-        {/* 게이지 카드 */}
-        <div className="card flex flex-col items-center flex-shrink-0">
-          {/* 카드 타이틀 */}
+        {/* 시장 체감 온도 카드 */}
+        <div className="card flex flex-col flex-shrink-0">
           <div className="flex items-center justify-between w-full mb-5">
             <div className="flex items-center gap-2">
-              <Activity className="w-5 h-5 text-brand-400" />
-              <span className="text-base font-semibold text-slate-200 tracking-tight">공포 & 탐욕 지수</span>
+              <Thermometer className="w-5 h-5 text-brand-400" />
+              <span className="text-base font-semibold text-slate-200 tracking-tight">시장 체감 온도</span>
             </div>
-            <span className="text-xs text-slate-500">Fear & Greed Index</span>
+            <span className="text-xs text-slate-500">Fear &amp; Greed →°C</span>
           </div>
 
-          {/* Recharts 게이지 */}
-          <div className="w-full max-w-xs mx-auto lg:max-w-[288px]">
-            <FearGreedGauge value={fgValue} loading={fg.loading} />
-          </div>
+          <MarketThermometer value={fgValue} loading={fg.loading} />
 
-          {/* 수치 + 배지 + 설명 */}
-          <div className="flex flex-col items-center gap-4 mt-5 w-full">
-            {/* 큰 숫자 */}
-            {fg.loading
-              ? <div className="w-24 h-14 rounded-xl bg-gray-800 animate-pulse" />
-              : (
-                <span
-                  className="text-6xl font-bold mono leading-none"
-                  style={{ color: getZoneColor(fgValue) }}
-                >
-                  {fgValue}
-                </span>
-              )
-            }
-
-            {/* 상태 배지 */}
-            <div className={`inline-flex items-center gap-2.5 px-5 py-2 rounded-2xl border ${status.badge}`}>
-              <span className={`w-2.5 h-2.5 rounded-full ${status.dot} animate-pulse`} />
-              <span className="text-base font-bold tracking-wide">{status.label}</span>
-            </div>
-
-            {!fg.loading && fg.data && (
-              <div className="text-center space-y-1 mt-0.5">
-                <p className="text-gray-300 text-xs font-semibold">{fg.data.classification}</p>
-                <p className="text-gray-500 text-xs max-w-[220px] whitespace-pre-line leading-relaxed">{status.desc}</p>
+          {/* 투자 처방 */}
+          {!fg.loading && (
+            <div
+              className="mt-5 rounded-xl px-3.5 py-3 space-y-1.5"
+              style={{
+                background: `${fgStage.glowColor}12`,
+                border: `1px solid ${fgStage.glowColor}30`,
+              }}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: fgStage.glowColor }} />
+                <span className="text-xs font-bold" style={{ color: fgStage.color }}>투자 처방</span>
               </div>
-            )}
-            {fg.error && <ErrLine msg="지수 조회 실패 — 잠시 후 재시도" />}
-          </div>
+              <p className="text-xs text-slate-400 leading-relaxed break-keep">{fgStage.prescription}</p>
+            </div>
+          )}
 
+          {/* 원본 지수 */}
+          {!fg.loading && fg.data && (
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
+              <span>Fear &amp; Greed 지수</span>
+              <span className="mono font-semibold" style={{ color: fgStage.color }}>
+                {fgValue} · {fg.data.classification}
+              </span>
+            </div>
+          )}
+
+          {fg.error && <ErrLine msg="지수 조회 실패 — 잠시 후 재시도" />}
           <p className="text-xs text-gray-700 mt-auto pt-4">Alternative.me · 1시간 캐시</p>
         </div>
 
