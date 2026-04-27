@@ -8,8 +8,9 @@ import {
   PieChart, Pie, Cell, Tooltip,
   ResponsiveContainer, Sector,
 } from 'recharts'
-import { BarChart2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, ChevronDown } from 'lucide-react'
+import { BarChart2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, Zap } from 'lucide-react'
 import type { Asset, MarketType } from './Portfolio'
+import type { SeedData } from '../lib/seed'
 import { fetchAssets } from '../lib/db'
 import { getPrice, type PriceResult } from '../lib/priceCache'
 import { getCachedFundamentals, refreshFundamentals, type Fundamentals } from '../lib/fundamentalsCache'
@@ -148,103 +149,92 @@ function StatCard({ label, value, sub, rising }: {
 
 
 
-// ── MDD 역사적 위기 시뮬레이션 ────────────────────────────
+// ── 시드머니 현황 카드 ─────────────────────────────────────
 
-const MDD_SCENARIOS = [
-  {
-    name: '2008 금융위기',    sub: 'Global Financial Crisis', year: '2008–09',
-    emoji: '🏦', barColor: 'bg-rose-500',
-    drawdowns: { 'K-Stock': 54, 'U-Stock': 56, 'Crypto': 0,  'Cash': 0 } as Record<string, number>,
-    color: 'text-rose-500',   bg: 'bg-rose-600/10 border-rose-600/25',
-  },
-  {
-    name: '2020 코로나 충격', sub: 'COVID-19 Crash',          year: '2020.02–03',
-    emoji: '🦠', barColor: 'bg-orange-400',
-    drawdowns: { 'K-Stock': 36, 'U-Stock': 34, 'Crypto': 50, 'Cash': 0 } as Record<string, number>,
-    color: 'text-orange-400', bg: 'bg-orange-500/8 border-orange-500/20',
-  },
-  {
-    name: '2022 긴축 쇼크',   sub: 'Fed Rate Hike Crisis',    year: '2022.01–12',
-    emoji: '📈', barColor: 'bg-amber-400',
-    drawdowns: { 'K-Stock': 26, 'U-Stock': 19, 'Crypto': 75, 'Cash': 0 } as Record<string, number>,
-    color: 'text-amber-400',  bg: 'bg-amber-500/8 border-amber-500/20',
-  },
-  {
-    name: '닷컴버블 붕괴',    sub: 'Dot-com Bubble',          year: '2000–02',
-    emoji: '💻', barColor: 'bg-violet-400',
-    drawdowns: { 'K-Stock': 55, 'U-Stock': 49, 'Crypto': 0,  'Cash': 0 } as Record<string, number>,
-    color: 'text-violet-400', bg: 'bg-violet-500/8 border-violet-500/20',
-  },
-] as const
-
-function MddSection({ assets, krwRate, open, onToggle }: {
-  assets: Asset[]; krwRate: number; open: boolean; onToggle: () => void
+function AnalyticsSeedCard({ seed, krwRate, krwInvested, usdInvested, krwCash, usdCash, seedKRW }: {
+  seed: SeedData; krwRate: number
+  krwInvested: number; usdInvested: number; krwCash: number; usdCash: number; seedKRW: number
 }) {
-  const portfolioKRW = assets.reduce((s, a) => {
-    const cost = holdingCost(a)
-    return s + (MARKET[a.market].currency === 'KRW' ? cost : cost * krwRate)
-  }, 0)
-  if (portfolioKRW <= 0) return null
+  const hasSeed = seed.krw > 0 || seed.usd > 0
+  if (!hasSeed) return null
+
+  function cashCls(ratio: number) {
+    if (ratio < 10) return { text: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/30' }
+    if (ratio < 20) return { text: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/30' }
+    return              { text: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30' }
+  }
+
+  const krwRatio = seed.krw > 0 ? (krwCash / seed.krw) * 100 : 0
+  const usdRatio = seed.usd > 0 ? (usdCash / seed.usd) * 100 : 0
+  const krwCls   = cashCls(krwRatio)
+  const usdCls   = cashCls(usdRatio)
 
   return (
     <div className="card space-y-4">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-2 text-left"
-      >
-        <TrendingDown className="w-4 h-4 text-rose-400 flex-shrink-0" />
-        <p className="text-sm font-semibold text-gray-200">역사적 위기 시뮬레이션 (MDD)</p>
-        <span className="text-[10px] text-gray-600 font-normal ml-1">내 비중 적용</span>
-        <ChevronDown className={`w-4 h-4 text-gray-500 ml-auto flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && <>
-      <p className="text-xs text-gray-500 leading-relaxed">
-        현재 포트폴리오 배분에 역사적 최대 낙폭(MDD)을 적용한 예상 손실입니다. 시장별 MDD 가중 평균으로 계산됩니다.
-      </p>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {MDD_SCENARIOS.map((s, i) => {
-          let lossKRW = 0
-          for (const a of assets) {
-            const cost   = holdingCost(a)
-            const krwVal = MARKET[a.market].currency === 'KRW' ? cost : cost * krwRate
-            lossKRW     += krwVal * ((s.drawdowns[a.market] ?? 0) / 100)
-          }
-          const afterKRW = portfolioKRW - lossKRW
-          const lossPct  = portfolioKRW > 0 ? (lossKRW / portfolioKRW) * 100 : 0
-          return (
-            <div key={i} className={`rounded-xl border px-4 py-3.5 ${s.bg}`}>
-              <div className="flex items-start justify-between gap-2 mb-2.5">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="text-base">{s.emoji}</span>
-                    <span className={`text-xs font-bold ${s.color}`}>{s.name}</span>
-                  </div>
-                  <span className="text-[10px] text-gray-600">{s.sub} · {s.year}</span>
-                </div>
-                <div className={`text-xl font-bold mono flex-shrink-0 ${s.color}`}>
-                  -{lossPct.toFixed(1)}%
-                </div>
+      <div className="flex items-center gap-2">
+        <Zap className="w-4 h-4 text-brand-400" />
+        <span className="text-sm font-semibold text-gray-200">시드머니 현황</span>
+        {seedKRW > 0 && <span className="ml-auto text-[10px] text-gray-600">통합 {fmtMan(seedKRW)}</span>}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {seed.krw > 0 && (
+          <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm">🇰🇷</span>
+              <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">원화 (KRW)</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-gray-600 mb-0.5">시드</p>
+                <p className="text-sm font-bold mono text-blue-300">{fmtMan(seed.krw)}</p>
               </div>
-              <div className="h-1.5 bg-black/20 rounded-full overflow-hidden mb-2">
-                <div className={`h-full rounded-full ${s.barColor} transition-all duration-700`}
-                  style={{ width: `${Math.min(100, lossPct)}%` }} />
-              </div>
-              <div className="flex justify-between text-[10px]">
-                <div>
-                  <p className="text-gray-600 mb-0.5">예상 손실</p>
-                  <p className={`font-bold mono ${s.color}`}>-{fmtMan(lossKRW)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-gray-600 mb-0.5">잔여 자산</p>
-                  <p className="text-gray-300 mono font-semibold">{fmtMan(afterKRW)}</p>
-                </div>
+              <div>
+                <p className="text-[10px] text-gray-600 mb-0.5">투자금</p>
+                <p className="text-sm font-bold mono text-gray-200">{fmtMan(krwInvested)}</p>
               </div>
             </div>
-          )
-        })}
+            <div className={`rounded-lg px-2.5 py-1.5 border ${krwCls.bg}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-500">현금 잔여</span>
+                <span className={`text-xs font-bold mono ${krwCls.text}`}>{fmtMan(krwCash)}</span>
+              </div>
+              <div className="flex items-center justify-between mt-0.5">
+                <span className="text-[10px] text-gray-600">현금 비중</span>
+                <span className={`text-[11px] font-bold mono ${krwCls.text}`}>{krwRatio.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+        )}
+        {seed.usd > 0 && (
+          <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm">🇺🇸</span>
+              <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">달러 (USD)</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-gray-600 mb-0.5">시드</p>
+                <p className="text-sm font-bold mono text-emerald-300">{fmtMoney(seed.usd, 'USD')}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-600 mb-0.5">투자금</p>
+                <p className="text-sm font-bold mono text-gray-200">{fmtMoney(usdInvested, 'USD')}</p>
+              </div>
+            </div>
+            <div className={`rounded-lg px-2.5 py-1.5 border ${usdCls.bg}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-500">현금 잔여</span>
+                <span className={`text-xs font-bold mono ${usdCls.text}`}>{fmtMoney(usdCash, 'USD')}</span>
+              </div>
+              <div className="flex items-center justify-between mt-0.5">
+                <span className="text-[10px] text-gray-600">현금 비중</span>
+                <span className={`text-[11px] font-bold mono ${usdCls.text}`}>{usdRatio.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      <p className="text-[10px] text-gray-700">과거 데이터 기준 최대 낙폭 추정치 · 미래 성과 보장 아님 · 투자 권유 아님</p>
-      </>}
+      <p className="text-[10px] text-gray-700 text-right">USD/KRW {krwRate.toLocaleString('ko-KR')} 기준 환산</p>
     </div>
   )
 }
@@ -396,7 +386,7 @@ function UpsideSection({ fundamentals }: { fundamentals: Map<string, Fundamental
 
 // ── Main Component ─────────────────────────────────────────
 
-export default function Analytics({ userId }: { userId: string | null }) {
+export default function Analytics({ userId, seed }: { userId: string | null; seed: SeedData }) {
   const [assets,    setAssets]    = useState<Asset[]>([])
   const [loading,   setLoading]   = useState(true)
   const [krwRate,   setKrwRate]   = useState(1350)
@@ -410,7 +400,6 @@ export default function Analytics({ userId }: { userId: string | null }) {
   // pie hover state
   const [pieActiveIdx, setPieActiveIdx] = useState<number | undefined>(undefined)
   const [barActiveIdx, setBarActiveIdx] = useState<number | undefined>(undefined)
-  const [mddOpen,      setMddOpen]      = useState(false)
 
   const hasAutoFetched = useRef(false)
 
@@ -500,6 +489,12 @@ export default function Analytics({ userId }: { userId: string | null }) {
   }
 
   const totalKrw = assets.reduce((s, a) => s + toKrw(a), 0)
+
+  const krwInvested = assets.reduce((s, a) => MARKET[a.market].currency === 'KRW' ? s + holdingCost(a) : s, 0)
+  const usdInvested = assets.reduce((s, a) => MARKET[a.market].currency === 'USD' ? s + holdingCost(a) : s, 0)
+  const krwSeedCash = seed.krw > 0 ? Math.max(0, seed.krw - krwInvested) : 0
+  const usdSeedCash = seed.usd > 0 ? Math.max(0, seed.usd - usdInvested) : 0
+  const seedKRW     = seed.krw + seed.usd * krwRate
 
   const byMarket = (['K-Stock', 'U-Stock', 'Crypto', 'Cash'] as MarketType[]).map(m => {
     const group = assets.filter(a => a.market === m)
@@ -649,6 +644,11 @@ export default function Analytics({ userId }: { userId: string | null }) {
           sub={byMarket.map(g => MARKET[g.market].label).join(' · ')}
         />
       </div>
+
+      {/* 시드머니 현황 */}
+      <AnalyticsSeedCard seed={seed} krwRate={krwRate}
+        krwInvested={krwInvested} usdInvested={usdInvested}
+        krwCash={krwSeedCash} usdCash={usdSeedCash} seedKRW={seedKRW} />
 
       {/* 도넛 차트 3개 — 카드 쉘은 항상 나란히, 안의 차트는 fundLoading 해제 시 동시 표시 */}
       {/* chartsReady=false: 카드 쉘 유지 + 내부 스켈레톤 / true: 도넛 차트 동시 마운트 */}
@@ -835,9 +835,6 @@ export default function Analytics({ userId }: { userId: string | null }) {
           )}
         </div>
       )}
-
-      {/* 역사적 위기 시뮬레이션 (MDD) */}
-      <MddSection assets={assets} krwRate={krwRate} open={mddOpen} onToggle={() => setMddOpen(v => !v)} />
 
       {/* 배당 수익률 + 목표가 상승여력 */}
       {fundamentals.size > 0 && (

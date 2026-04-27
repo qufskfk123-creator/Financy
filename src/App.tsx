@@ -309,7 +309,7 @@ export default function App() {
             <motion.div key="analytics"
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}>
-              <ErrorBoundary label="분석"><Analytics userId={user?.id ?? null} /></ErrorBoundary>
+              <ErrorBoundary label="분석"><Analytics userId={user?.id ?? null} seed={seed} /></ErrorBoundary>
             </motion.div>
           )}
         </AnimatePresence>
