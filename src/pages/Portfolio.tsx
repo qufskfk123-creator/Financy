@@ -1302,10 +1302,18 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
       fetchAssets(userId)
         .then(data => {
           const localAssets = loadAssets()
-          // DB는 qty/avg_price만 저장 (entries/sells/totalAmount 미지원)
-          // localStorage에 상세 데이터가 있으면 그것을 우선 사용
-          if (localAssets.length === 0) setAssets(data)
-          if (localAssets.length > 0 && data.length === 0) setMigrationPrompt(true)
+          if (localAssets.length === 0) {
+            // localStorage 없음 → DB 데이터 사용
+            setAssets(data)
+          } else if (data.length === 0) {
+            // DB 없음 → 마이그레이션 안내
+            setMigrationPrompt(true)
+          } else {
+            // 둘 다 있음 → DB에만 있는 자산(다른 기기/세션에서 추가된 것)을 병합
+            const localIds = new Set(localAssets.map(a => a.id))
+            const dbOnly = data.filter(a => !localIds.has(a.id))
+            if (dbOnly.length > 0) setAssets([...localAssets, ...dbOnly])
+          }
         })
         .catch(() => {})
         .finally(() => setDbLoading(false))

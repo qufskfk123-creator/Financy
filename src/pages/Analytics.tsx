@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ResponsiveContainer, Treemap,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -563,8 +564,8 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
         ))}
         <span className="ml-auto text-[10px] text-gray-600">크기 = 비중</span>
       </div>
-      {/* 호버 툴팁 */}
-      {tooltip && (
+      {/* 호버 툴팁 — portal로 body에 마운트해 transform stacking context 탈출 */}
+      {tooltip && createPortal(
         <div className="fixed z-[9999] pointer-events-none"
           style={{ left: tooltip.x + 14, top: tooltip.y - 10 }}>
           <div style={{
@@ -605,7 +606,8 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
