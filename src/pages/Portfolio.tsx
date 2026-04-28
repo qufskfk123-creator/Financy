@@ -1607,7 +1607,8 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
           </p>
         </div>
         <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 btn-primary text-sm">
-          <Plus className="w-3.5 h-3.5" />자산 등록
+          <Plus className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">자산 등록</span>
         </button>
       </div>
 
