@@ -26,7 +26,6 @@ import {
   Newspaper,
   AlertCircle,
   Waves,
-  CalendarDays,
   ChevronDown,
   CloudRain,
   CloudSun,
@@ -35,6 +34,7 @@ import {
   Droplets,
   Snowflake,
   Flame,
+  Zap,
 } from 'lucide-react'
 
 // ── 타입 ───────────────────────────────────────────────────
@@ -114,43 +114,43 @@ interface TempStage {
 const TEMP_STAGES: TempStage[] = [
   {
     from: 0, to: 21,
-    name: '한파', sublabel: 'Polar Vortex',
+    name: '동결', sublabel: 'Deep Freeze',
     icon: Snowflake,
-    prescription: '시장이 극단적 공포에 빠져 있습니다. 신중한 분할 진입으로 저가 기회를 탐색하세요.',
-    color: '#60a5fa', liquidColor: '#3b82f6', glowColor: '#60a5fa',
-    iconAnim: 'weather-sun-spin 5s linear infinite',
-  },
-  {
-    from: 21, to: 41,
-    name: '흐림', sublabel: 'Overcast',
-    icon: CloudSun,
-    prescription: '시장이 방향을 잃고 위축된 상태입니다. 우량 자산 분할 매수를 검토하세요.',
-    color: '#a78bfa', liquidColor: '#8b5cf6', glowColor: '#a78bfa',
-    iconAnim: 'weather-cloud-bob 2.4s ease-in-out infinite',
-  },
-  {
-    from: 41, to: 61,
-    name: '쾌적', sublabel: 'Pleasant',
-    icon: Sun,
-    prescription: '시장이 균형 상태입니다. 추세에 따라 포지션을 유지·조정하세요.',
-    color: '#34d399', liquidColor: '#10b981', glowColor: '#34d399',
+    prescription: '시장이 공황으로 완전히 얼어붙었습니다. 극단적 저평가 구간이므로 소액 분할 진입을 통해 저점을 탐색하세요.',
+    color: '#BAE6FD', liquidColor: '#0369A1', glowColor: '#7DD3FC',
     iconAnim: 'weather-sun-spin 8s linear infinite',
   },
   {
-    from: 61, to: 81,
-    name: '따뜻', sublabel: 'Warm',
+    from: 21, to: 41,
+    name: '냉기', sublabel: 'Cold Fear',
     icon: Wind,
-    prescription: '시장이 과열 조짐을 보입니다. 추세 비중 확대와 리스크 관리를 병행하세요.',
-    color: '#fbbf24', liquidColor: '#f59e0b', glowColor: '#fbbf24',
-    iconAnim: 'weather-wind-blow 1.8s ease-in-out infinite',
+    prescription: '차가운 냉기가 시장을 덮고 있습니다. 투자 심리가 얼어있지만 우량 자산 분할 매수를 천천히 검토할 구간입니다.',
+    color: '#93C5FD', liquidColor: '#1D4ED8', glowColor: '#60A5FA',
+    iconAnim: 'weather-wind-blow 2s ease-in-out infinite',
+  },
+  {
+    from: 41, to: 61,
+    name: '미온', sublabel: 'Lukewarm',
+    icon: Minus,
+    prescription: '시장이 미지근한 균형 상태입니다. 뚜렷한 방향성이 없으므로 추세에 따라 포지션을 유지·조정하세요.',
+    color: '#94A3B8', liquidColor: '#475569', glowColor: '#64748B',
+    iconAnim: 'none',
+  },
+  {
+    from: 61, to: 81,
+    name: '열기', sublabel: 'Running Hot',
+    icon: Flame,
+    prescription: '탐욕의 열기가 시장을 달구고 있습니다. 추세를 쫓되 사전에 익절 라인을 설정하고 비중 관리를 철저히 하세요.',
+    color: '#FCA5A5', liquidColor: '#DC2626', glowColor: '#F87171',
+    iconAnim: 'weather-flood-pulse 1.8s ease-in-out infinite',
   },
   {
     from: 81, to: 101,
-    name: '폭염', sublabel: 'Heatwave',
-    icon: Flame,
-    prescription: '시장이 극단적으로 과열되어 있습니다. 익절·리스크 관리를 최우선으로 하세요.',
-    color: '#f87171', liquidColor: '#ef4444', glowColor: '#f87171',
-    iconAnim: 'weather-flood-pulse 1.5s ease-in-out infinite',
+    name: '과열', sublabel: 'Overheating',
+    icon: Zap,
+    prescription: '시장이 한계 온도를 돌파했습니다. 극단적 탐욕이 지배하고 있으니 즉각 익절하고 신규 진입을 자제하세요.',
+    color: '#FDA4AF', liquidColor: '#7F1D1D', glowColor: '#EF4444',
+    iconAnim: 'weather-flood-pulse 0.8s ease-in-out infinite',
   },
 ]
 
@@ -179,8 +179,52 @@ function MarketThermometer({ value, loading }: { value: number; loading: boolean
       {/* ── 온도계 + 눈금 ── */}
       <div className="flex items-end justify-center gap-3 mb-5">
 
+        {/* 현재 온도 인디케이터 (좌측) */}
+        <div className="relative" style={{ height: TUBE_H + BULB_D, width: 52 }}>
+          {!loading && (
+            <motion.div
+              className="absolute right-0 flex flex-row-reverse items-center gap-1.5"
+              initial={{ bottom: BULB_D - 2 }}
+              animate={{ bottom: (BULB_D - 2) + (Math.max(0, Math.min(100, value)) / 100) * TUBE_H }}
+              transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
+              style={{ transform: 'translateY(50%)', zIndex: 10 }}
+            >
+              <div style={{
+                width: 16, height: 2, borderRadius: 1,
+                background: stage.glowColor,
+                boxShadow: `0 0 8px ${stage.glowColor}`,
+              }} />
+              <span className="mono text-[11px] font-bold leading-none" style={{ color: stage.color }}>
+                {temp > 0 ? '+' : ''}{temp}°
+              </span>
+            </motion.div>
+          )}
+        </div>
+
         {/* 튜브 */}
-        <div className="flex flex-col items-center">
+        <div className="relative flex flex-col items-center">
+          {/* 온도계 케이스 아웃라인 SVG */}
+          <svg
+            className="absolute pointer-events-none"
+            width="42" height="228"
+            viewBox="0 0 42 228"
+            style={{ top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 3, overflow: 'visible' }}
+          >
+            {/* 케이스 외곽 실루엣: 튜브(width=18→x:12~30) + 캡(r=9) + 구근(r=20,center y=207) */}
+            <path
+              d="M 12,189 L 12,9 A 9,9 0 0 1 30,9 L 30,189 A 20,20 0 1 1 12,189 Z"
+              fill="none"
+              stroke="var(--mtp-scale-color)"
+              strokeWidth="1"
+            />
+            {/* 왼쪽 유리 반사 하이라이트 */}
+            <line
+              x1="14" y1="12" x2="14" y2="183"
+              stroke="rgba(255,255,255,0.10)"
+              strokeWidth="1"
+              strokeLinecap="round"
+            />
+          </svg>
           {/* 상단 캡 */}
           <div style={{
             width: 18, height: 9,
@@ -238,10 +282,10 @@ function MarketThermometer({ value, loading }: { value: number; loading: boolean
           </motion.div>
         </div>
 
-        {/* 눈금 */}
+        {/* 눈금 (우측) */}
         <div className="relative" style={{ height: TUBE_H + BULB_D, width: 68 }}>
           {SCALE_MARKS.map(({ temp: t, pct, highlight }) => {
-            const bottom = BULB_D / 2 + (pct / 100) * TUBE_H
+            const bottom = (BULB_D - 2) + (pct / 100) * TUBE_H
             return (
               <div
                 key={t}
@@ -259,26 +303,6 @@ function MarketThermometer({ value, loading }: { value: number; loading: boolean
               </div>
             )
           })}
-
-          {/* 현재 온도 인디케이터 */}
-          {!loading && (
-            <motion.div
-              className="absolute left-0 flex items-center gap-1.5"
-              initial={{ bottom: BULB_D / 2 }}
-              animate={{ bottom: BULB_D / 2 + (Math.max(0, Math.min(100, value)) / 100) * TUBE_H }}
-              transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
-              style={{ transform: 'translateY(50%)', zIndex: 10 }}
-            >
-              <div style={{
-                width: 16, height: 2, borderRadius: 1,
-                background: stage.glowColor,
-                boxShadow: `0 0 8px ${stage.glowColor}`,
-              }} />
-              <span className="mono text-[11px] font-bold leading-none" style={{ color: stage.color }}>
-                {temp > 0 ? '+' : ''}{temp}°
-              </span>
-            </motion.div>
-          )}
         </div>
       </div>
 
@@ -371,225 +395,227 @@ function parseNum(s: string | null): number | null {
   return isNaN(n) ? null : n
 }
 
-const IMPACT_STYLE: Record<string, { label: string; text: string; bg: string; dot: string }> = {
-  High:   { label: '고', text: 'text-rose-400',   bg: 'bg-rose-500/15',   dot: 'bg-rose-400' },
-  Medium: { label: '중', text: 'text-amber-400',  bg: 'bg-amber-500/15',  dot: 'bg-amber-400' },
-  Low:    { label: '저', text: 'text-slate-500',  bg: 'bg-slate-500/15',  dot: 'bg-slate-400' },
+// ── 오늘의 투자 기상 특보 ────────────────────────────────
+
+function getCountdown(dateStr: string, now: Date): string | null {
+  if (!dateStr) return null
+  const normalized = dateStr.includes(' ')
+    ? dateStr.replace(' ', 'T') + 'Z'
+    : dateStr.length === 10
+      ? dateStr + 'T00:00:00Z'
+      : dateStr
+  const t = new Date(normalized)
+  if (isNaN(t.getTime())) return null
+  const diff = t.getTime() - now.getTime()
+  if (diff <= 0) return null
+  const totalMins = Math.floor(diff / 60_000)
+  const h = Math.floor(totalMins / 60)
+  const m = totalMins % 60
+  if (h > 0)  return m > 0 ? `${h}시간 ${m}분 뒤 발표` : `${h}시간 뒤 발표`
+  if (m > 0)  return `${m}분 뒤 발표`
+  return '곧 발표'
 }
 
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+function buildForecast(todayEvents: EconEvent[]): string {
+  const upcoming     = todayEvents.filter(ev => !ev.actual)
+  const highUpcoming = upcoming.filter(ev => ev.impact === 'High')
+  if (highUpcoming.length > 0) {
+    const ev    = highUpcoming[0]
+    const rawT  = ev.date.includes(' ') ? ev.date.split(' ')[1] : ''
+    const time  = /^\d{2}:\d{2}/.test(rawT) ? rawT.slice(0, 5) : ''
+    const flag  = COUNTRY_FLAG[ev.country] ?? ''
+    const rawName = ev.event.replace(/^\d{4}-\d{2}-\d{2}\s+/, '')
+    const name  = rawName.length > 30 ? rawName.slice(0, 30) + '…' : rawName
+    const extra = highUpcoming.length > 1 ? ` 외 ${highUpcoming.length - 1}건` : ''
+    return `${flag} 오늘 ${time} UTC — ${name}${extra} 발표 예정. 시장 온도 급변 가능성 높습니다.`
+  }
+  if (upcoming.length > 0)
+    return `오늘 예정된 지표 ${upcoming.length}건 — 주요 발표 전 포지션을 점검하세요.`
+  const released = todayEvents.filter(ev => ev.actual)
+  if (released.length > 0) {
+    const beat = released.filter(ev => {
+      const a = parseNum(ev.actual), e = parseNum(ev.estimate)
+      return a !== null && e !== null && a >= e
+    }).length
+    return `오늘의 지표 ${released.length}건 발표 완료 — ${beat}건 예상 상회, ${released.length - beat}건 하회.`
+  }
+  return '오늘 예정된 주요 경제 지표가 없습니다.'
+}
 
-function EconCalendarView({ events, loading, error }: { events: EconEvent[]; loading: boolean; error?: string }) {
-  const now      = useMemo(() => new Date(), [])
-  const todayKey = useMemo(() => now.toISOString().slice(0, 10), [now])
-  const year     = now.getFullYear()
-  const month    = now.getMonth()
-  const [selectedKey, setSelectedKey] = useState<string | null>(todayKey)
+function ImpactFlames({ impact }: { impact: string }) {
+  const count = impact === 'High' ? 3 : impact === 'Medium' ? 2 : 1
+  const color = impact === 'High' ? '#f87171' : impact === 'Medium' ? '#fbbf24' : '#334155'
+  return (
+    <span className="inline-flex items-center gap-0 flex-shrink-0">
+      {Array.from({ length: count }).map((_, i) => (
+        <Flame key={i} style={{ width: 9, height: 9, color }} />
+      ))}
+    </span>
+  )
+}
 
-  const eventsByDate = useMemo(() => {
-    const map: Record<string, EconEvent[]> = {}
-    for (const ev of events) {
-      const key = ev.date.slice(0, 10)
-      if (!map[key]) map[key] = []
-      map[key].push(ev)
-    }
-    return map
-  }, [events])
+function TodayEconAlert({ events, loading, error }: {
+  events: EconEvent[]; loading: boolean; error?: string
+}) {
+  const [now, setNow] = useState(() => new Date())
 
-  const cells = useMemo(() => {
-    const firstWd = new Date(year, month, 1).getDay()
-    const total   = new Date(year, month + 1, 0).getDate()
-    const arr: (number | null)[] = []
-    for (let i = 0; i < firstWd; i++) arr.push(null)
-    for (let d = 1; d <= total; d++) arr.push(d)
-    return arr
-  }, [year, month])
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(t)
+  }, [])
 
-  const selectedEvents = selectedKey ? (eventsByDate[selectedKey] ?? []) : []
-  const selectedLabel  = selectedKey
-    ? `${parseInt(selectedKey.slice(5, 7))}월 ${parseInt(selectedKey.slice(8, 10))}일`
-    : null
+  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), [])
+
+  const todayEvents = useMemo(() =>
+    events
+      .filter(ev => ev.date.slice(0, 10) === todayKey)
+      .sort((a, b) => a.date.localeCompare(b.date))
+  , [events, todayKey])
+
+  const forecastMsg = useMemo(() => buildForecast(todayEvents), [todayEvents])
 
   if (loading) return (
-    <div className="space-y-2.5">
-      <div className="h-4 w-20 mx-auto rounded bg-gray-800 animate-pulse mb-2" />
-      <div className="grid grid-cols-7 gap-1">
-        {Array.from({ length: 35 }).map((_, i) => (
-          <div key={i} className="aspect-square rounded-md bg-gray-800 animate-pulse" />
-        ))}
-      </div>
+    <div className="space-y-3">
+      <div className="h-8 rounded-lg bg-gray-800 animate-pulse" />
+      {[0, 1, 2].map(i => (
+        <div key={i} className="space-y-1.5">
+          <div className="h-3.5 w-3/4 rounded bg-gray-800 animate-pulse" />
+          <div className="h-3 w-1/2 rounded bg-gray-800 animate-pulse" />
+        </div>
+      ))}
     </div>
   )
+
   if (error) return <ErrLine msg="경제 지표 조회 실패 — 잠시 후 재시도" />
 
   return (
-    <div>
-      {/* ── 월 표시 (고정, 네비 없음) ── */}
-      <p className="text-xs font-semibold text-slate-300 mono text-center mb-2.5">
-        {year}년 {month + 1}월
-      </p>
-
-      {/* ── 요일 헤더 ── */}
-      <div className="grid grid-cols-7 text-center mb-1">
-        {WEEKDAYS.map((d, i) => (
-          <span key={d} className={`text-[10px] font-medium ${i === 0 ? 'text-rose-500/60' : i === 6 ? 'text-blue-500/60' : 'text-slate-600'}`}>
-            {d}
+    <div className="space-y-3">
+      {/* AI 기상 예보 배너 */}
+      <div
+        className="rounded-xl px-3.5 py-3 space-y-1.5"
+        style={{
+          background: 'var(--alert-banner-bg)',
+          border: '1px solid rgba(108,99,255,0.32)',
+          borderLeft: '3px solid #6C63FF',
+        }}
+      >
+        <div className="flex items-center gap-1.5">
+          <Zap className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
+          <span className="text-[10px] font-bold tracking-widest uppercase text-brand-400">
+            지표 기상 특보
           </span>
-        ))}
+        </div>
+        <p className="text-xs leading-relaxed break-keep font-medium" style={{ color: 'var(--alert-forecast-text)' }}>
+          {forecastMsg}
+        </p>
       </div>
 
-      {/* ── 날짜 그리드 ── */}
-      <div className="grid grid-cols-7 gap-y-0.5">
-        {cells.map((day, i) => {
-          if (!day) return <div key={`e-${i}`} />
-          const dateKey   = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-          const dayEvents = eventsByDate[dateKey] ?? []
-          const isToday   = dateKey === todayKey
-          const isSel     = selectedKey === dateKey
-          const hasHigh   = dayEvents.some(e => e.impact === 'High')
-          const hasMed    = !hasHigh && dayEvents.some(e => e.impact === 'Medium')
-          const wd        = i % 7
+      {/* 이벤트 리스트 */}
+      {todayEvents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-6 gap-2 text-slate-600">
+          <AlertCircle className="w-6 h-6 opacity-40" />
+          <p className="text-xs">오늘 예정된 주요 지표가 없습니다</p>
+        </div>
+      ) : (
+        <>
+        {/* 날짜 헤더 */}
+        <div className="flex items-center justify-between py-1.5 border-b border-gray-800/70">
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs font-semibold text-slate-400 mono">
+              {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}
+            </span>
+            <span className="text-[10px] text-slate-600 mono">
+              {new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', weekday: 'short' })} ET
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-600 mono">{todayEvents.length}건</span>
+        </div>
+        <div className="divide-y divide-gray-800/50">
+          {todayEvents.map((ev, i) => {
+            const rawT      = ev.date.includes(' ') ? ev.date.split(' ')[1] : ''
+            const time      = /^\d{2}:\d{2}/.test(rawT) ? rawT.slice(0, 5) : ''
+            const flag      = COUNTRY_FLAG[ev.country] ?? ev.country
+            const eventName = ev.event.replace(/^\d{4}-\d{2}-\d{2}\s+/, '')
+            const countdown = getCountdown(ev.date, now)
+            const hasActual = ev.actual != null && ev.actual !== ''
+            const isPast    = countdown === null
+            const actNum    = parseNum(ev.actual)
+            const estNum    = parseNum(ev.estimate)
+            const verdict   = hasActual && actNum !== null && estNum !== null
+              ? actNum >= estNum ? 'beat' : 'miss'
+              : hasActual ? 'actual' : null
 
-          return (
-            <button
-              key={dateKey}
-              onClick={() => setSelectedKey(k => k === dateKey ? null : dateKey)}
-              className={`
-                relative flex flex-col items-center justify-center gap-0.5
-                aspect-square rounded-lg text-[11px] font-medium
-                transition-colors
-                ${isSel ? 'bg-brand-600/25' : dayEvents.length > 0 ? 'hover:bg-gray-800/70 cursor-pointer' : 'cursor-default'}
-              `}
-            >
-              {/* 날짜 숫자 */}
-              <span className={[
-                wd === 0 ? 'text-rose-400/80' : wd === 6 ? 'text-blue-400/80' : 'text-slate-400',
-                isToday ? '!text-brand-400 font-bold' : '',
-                isSel   ? '!text-slate-100' : '',
-              ].join(' ')}>
-                {day}
-              </span>
-              {/* 임팩트 도트 */}
-              {dayEvents.length > 0 && (
-                <span className={`w-[5px] h-[5px] rounded-full flex-shrink-0 ${hasHigh ? 'bg-rose-400' : hasMed ? 'bg-amber-400' : 'bg-slate-500'}`} />
-              )}
-              {/* 이벤트 수 뱃지 (2개 이상) */}
-              {dayEvents.length > 1 && (
-                <span className="absolute top-0.5 right-0.5 text-[8px] text-slate-600 mono leading-none">
-                  {dayEvents.length}
-                </span>
-              )}
-              {/* 오늘 링 */}
-              {isToday && (
-                <span className="absolute inset-0 rounded-lg ring-1 ring-brand-500/40 pointer-events-none" />
-              )}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* ── 선택된 날 이벤트 ── */}
-      <AnimatePresence mode="wait">
-        {selectedKey && (
-          <motion.div
-            key={selectedKey}
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.18 }}
-            className="mt-3 border-t border-gray-800/60 pt-3"
-          >
-            <p className="text-[10px] text-slate-500 mb-2.5 font-medium">
-              {selectedLabel} 지표
-              {selectedEvents.length > 0 && (
-                <span className="ml-1.5 text-brand-400">{selectedEvents.length}건</span>
-              )}
-            </p>
-            {selectedEvents.length === 0
-              ? <p className="text-[11px] text-slate-600 text-center py-3">예정된 지표 없음</p>
-              : <EconCalendarList events={selectedEvents} loading={false} />
-            }
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-function EconCalendarList({ events, loading, error }: { events: EconEvent[]; loading: boolean; error?: string }) {
-  if (loading) {
-    return <div className="space-y-3">{[0, 1, 2, 3].map(i => (
-      <div key={i} className="space-y-1.5">
-        <Skel w="w-2/3" />
-        <Skel w="w-full" />
-        <Skel w="w-1/2" />
-      </div>
-    ))}</div>
-  }
-  if (error) return <ErrLine msg="경제 지표 조회 실패 — 잠시 후 재시도" />
-  if (events.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 gap-2 text-slate-600">
-        <CalendarDays className="w-7 h-7 opacity-40" />
-        <p className="text-xs">오늘 예정된 주요 지표가 없습니다</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="divide-y divide-gray-800/60">
-      {events.map((ev, i) => {
-        const time    = ev.date.includes(' ') ? ev.date.split(' ')[1].slice(0, 5) : ''
-        const flag    = COUNTRY_FLAG[ev.country] ?? ev.country
-        const style   = IMPACT_STYLE[ev.impact] ?? IMPACT_STYLE.Low
-        const actNum  = parseNum(ev.actual)
-        const estNum  = parseNum(ev.estimate)
-        const beatMiss = actNum != null && estNum != null
-          ? actNum >= estNum ? 'beat' : 'miss'
-          : null
-
-        return (
-          <div key={i} className="py-2.5 first:pt-0 last:pb-0">
-            {/* 헤더 행: 임팩트 배지 + 국가·시간 */}
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${style.bg} ${style.text}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-                {style.label}
-              </span>
-              <span className="text-[10px] text-slate-500">{flag} {ev.country}</span>
-              {time && <><span className="text-slate-700 text-[10px]">·</span><span className="text-[10px] text-slate-500 mono">{time} UTC</span></>}
-            </div>
-
-            {/* 이벤트명 + 실제값 */}
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-xs text-slate-200 leading-snug flex-1 min-w-0 break-keep">{ev.event}</p>
-              {ev.actual != null && (
-                <span className={`text-xs font-bold mono flex-shrink-0 ${beatMiss === 'beat' ? 'text-emerald-400' : beatMiss === 'miss' ? 'text-rose-400' : 'text-slate-300'}`}>
-                  {ev.actual}
-                  {beatMiss === 'beat' && <span className="text-[9px] ml-0.5">▲</span>}
-                  {beatMiss === 'miss' && <span className="text-[9px] ml-0.5">▼</span>}
-                </span>
-              )}
-            </div>
-
-            {/* 예측·이전값 */}
-            {(ev.estimate || ev.previous) && (
-              <div className="flex gap-3 mt-1">
-                {ev.estimate && (
-                  <span className="text-[10px] text-slate-600">
-                    예측 <span className="text-slate-400 mono">{ev.estimate}</span>
+            return (
+              <div key={i} className="py-2.5 first:pt-0 last:pb-0">
+                {/* 상단 행: 시간 · 국가 · 중요도 · 이벤트명 · 상태 배지 */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {time && (
+                    <span className="mono text-[11px] font-bold text-slate-500 flex-shrink-0 w-[38px]">
+                      {time}
+                    </span>
+                  )}
+                  <span className="text-[11px] flex-shrink-0">{flag}</span>
+                  <ImpactFlames impact={ev.impact} />
+                  <span className="text-xs text-slate-200 font-medium flex-1 min-w-0 break-keep">
+                    {eventName}
                   </span>
-                )}
-                {ev.previous && (
-                  <span className="text-[10px] text-slate-600">
-                    이전 <span className="text-slate-400 mono">{ev.previous}</span>
-                  </span>
+                  {verdict === 'beat' && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 bg-emerald-500/15 text-emerald-400">
+                      ▲ 호조
+                    </span>
+                  )}
+                  {verdict === 'miss' && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 bg-rose-500/15 text-rose-400">
+                      ▼ 부진
+                    </span>
+                  )}
+                  {verdict === 'actual' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md flex-shrink-0 bg-slate-500/15 text-slate-400">
+                      발표
+                    </span>
+                  )}
+                  {!hasActual && !isPast && countdown && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md flex-shrink-0 bg-brand-600/15 text-brand-400">
+                      {countdown}
+                    </span>
+                  )}
+                  {!hasActual && isPast && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md flex-shrink-0 bg-slate-500/15 text-slate-500">
+                      미발표
+                    </span>
+                  )}
+                </div>
+
+                {/* 하단 행: 이전 / 예상 / 실제 */}
+                {(ev.previous || ev.estimate || ev.actual) && (
+                  <div className="flex items-center gap-3 mt-1 pl-[46px]">
+                    {ev.previous && (
+                      <span className="text-[10px] text-slate-700">
+                        이전 <span className="text-slate-500 mono">{ev.previous}</span>
+                      </span>
+                    )}
+                    {ev.estimate && (
+                      <span className="text-[10px] text-slate-700">
+                        예상 <span className="text-slate-500 mono">{ev.estimate}</span>
+                      </span>
+                    )}
+                    {ev.actual && (
+                      <span className="text-[10px]">
+                        실제 <span className="mono font-semibold" style={{
+                          color: verdict === 'beat' ? '#34d399'
+                               : verdict === 'miss' ? '#f87171'
+                               : '#94a3b8',
+                        }}>{ev.actual}</span>
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        )
-      })}
+            )
+          })}
+        </div>
+        </>
+      )}
     </div>
   )
 }
@@ -730,12 +756,9 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
       {/* ── 헤더 + 점수 ── */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-1.5">
-          <Waves
-            className="w-3.5 h-3.5 flex-shrink-0"
-            style={{ color: loading ? '#475569' : stage.glowColor }}
-          />
-          <div>
-            <span className="text-xs font-semibold tracking-widest uppercase text-slate-400">
+          <Waves className="w-5 h-5 text-brand-400 flex-shrink-0" />
+          <div className="flex items-center">
+            <span className="text-base font-semibold text-slate-200 tracking-tight">
               유동성 날씨
             </span>
             {previewIdx !== null && (
@@ -748,12 +771,12 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
         {!loading && (
           <div className="text-right leading-none space-y-0.5">
             <div className="flex items-baseline justify-end gap-0.5">
-              <span className="font-mono font-bold text-4xl tracking-tight leading-none" style={{ color: stage.glowColor }}>
+              <span className="font-mono font-bold text-2xl tracking-tight leading-none" style={{ color: stage.glowColor }}>
                 {displayScore}
               </span>
-              <span className="font-mono text-sm text-slate-500">pts</span>
+              <span className="font-mono text-xs text-slate-500">pts</span>
             </div>
-            <p className="font-mono text-sm font-semibold tracking-widest uppercase"
+            <p className="font-mono text-xs font-semibold tracking-widest uppercase"
               style={{ color: stage.glowColor + 'cc' }}>
               {stage.sublabel}
             </p>
@@ -773,7 +796,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
               <button
                 key={i}
                 onClick={() => setPreviewIdx(prev => prev === i ? null : i)}
-                className="relative rounded-xl overflow-hidden flex flex-col items-center justify-center gap-1 py-3 cursor-pointer"
+                className="relative rounded-xl overflow-hidden flex flex-col items-center justify-center gap-1 px-1 py-3 md:flex-row md:gap-2 md:px-2 cursor-pointer"
                 style={{
                   minHeight: 88,
                   background: isActive ? s.activeBg : 'var(--mtp-tank-bg)',
@@ -791,10 +814,8 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
               >
                 <WeatherBgPattern idx={i} />
                 <Icon
-                  className="relative z-10 flex-shrink-0"
+                  className="relative z-10 flex-shrink-0 w-[22px] h-[22px] md:w-[33px] md:h-[33px]"
                   style={{
-                    width: 22,
-                    height: 22,
                     color: isActive ? s.iconColor : 'rgba(148,163,184,0.45)',
                     strokeWidth: 1.5,
                     animation: isActive ? s.iconAnim : 'none',
@@ -802,20 +823,26 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
                     transition: 'color 0.4s, filter 0.4s',
                   }}
                 />
-                <span
-                  className="relative z-10 text-[11px] font-bold leading-none text-center px-0.5"
-                  style={{
-                    color: isActive ? s.iconColor : 'rgba(148,163,184,0.40)',
-                    textShadow: isActive ? `0 0 8px ${s.glowColor}` : 'none',
-                    transition: 'color 0.4s',
-                  }}
-                >{s.name}</span>
-                {isActive && (
+                <div className="relative z-10 flex flex-col items-center gap-0.5 min-w-0 md:items-start">
                   <span
-                    className="relative z-10 font-mono text-[10px] font-semibold leading-none"
-                    style={{ color: s.glowColor + 'cc' }}
-                  >{previewIdx !== null ? `${s.from}–${s.to - 1}` : `${score}pt`}</span>
-                )}
+                    className="text-[11px] font-bold leading-none md:text-[16px]"
+                    style={{
+                      color: isActive ? s.iconColor : 'rgba(148,163,184,0.40)',
+                      textShadow: isActive ? `0 0 8px ${s.glowColor}` : 'none',
+                      transition: 'color 0.4s',
+                    }}
+                  >{s.name}</span>
+                  <span
+                    className="text-[9px] leading-none md:text-[13px]"
+                    style={{ color: isActive ? s.glowColor + 'aa' : 'rgba(148,163,184,0.30)', transition: 'color 0.4s' }}
+                  >{s.sublabel}</span>
+                  {isActive && (
+                    <span
+                      className="font-mono text-[10px] font-semibold leading-none mt-0.5 md:text-[12px]"
+                      style={{ color: s.glowColor + 'cc' }}
+                    >{previewIdx !== null ? `${s.from}–${s.to - 1}` : `${score}pt`}</span>
+                  )}
+                </div>
               </button>
             )
           })}
@@ -845,7 +872,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
         ) : data?.indices && data.indices.length > 0 ? (
           data.indices.map(idx => (
             <div key={idx.ticker} className="rounded-xl px-2.5 py-3 space-y-1"
-              style={{ background: 'var(--mtp-idx-bg)', border: '0.5px solid var(--mtp-idx-border)' }}>
+              style={{ background: 'var(--mtp-idx-bg)', border: '0.5px solid var(--mtp-idx-border)', borderLeft: '3px solid var(--mtp-idx-border)' }}>
               <p className="text-xs text-slate-400 font-medium truncate">{idx.name}</p>
               <div className={`flex items-center gap-0.5 text-sm font-bold mono ${idx.changePercent >= 0 ? 'text-rise' : 'text-fall'}`}>
                 {idx.changePercent >= 0
@@ -1006,15 +1033,16 @@ export default function Dashboard() {
             <div
               className="mt-5 rounded-xl px-3.5 py-3 space-y-1.5"
               style={{
-                background: `${fgStage.glowColor}12`,
-                border: `1px solid ${fgStage.glowColor}30`,
+                background: 'var(--alert-banner-bg)',
+                border: '1px solid rgba(108,99,255,0.32)',
+                borderLeft: `3px solid ${fgStage.glowColor}`,
               }}
             >
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: fgStage.glowColor }} />
-                <span className="text-xs font-bold" style={{ color: fgStage.color }}>투자 처방</span>
+                <Zap className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
+                <span className="text-[10px] font-bold tracking-widest uppercase text-brand-400">투자 처방</span>
               </div>
-              <p className="text-xs text-slate-400 leading-relaxed break-keep">{fgStage.prescription}</p>
+              <p className="text-xs leading-relaxed break-keep font-medium" style={{ color: 'var(--alert-forecast-text)' }}>{fgStage.prescription}</p>
             </div>
           )}
 
@@ -1032,30 +1060,30 @@ export default function Dashboard() {
           <p className="text-xs text-gray-700 mt-auto pt-4">Alternative.me · 1시간 캐시</p>
         </div>
 
-        {/* 경제 캘린더 — 데스크톱 전용 */}
+        {/* 오늘의 투자 기상 특보 — 데스크톱 전용 */}
         <div className="card hidden lg:flex lg:flex-col flex-1 min-h-0">
           <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-            <CalendarDays className="w-5 h-5 text-brand-400" />
-            <span className="text-base font-semibold text-slate-200 tracking-tight">경제 캘린더</span>
+            <AlertCircle className="w-5 h-5 text-brand-400" />
+            <span className="text-base font-semibold text-slate-200 tracking-tight">오늘의 투자 기상 특보</span>
           </div>
           <div className="overflow-y-auto flex-1 min-h-0 pr-0.5">
-            <EconCalendarView events={cal.events} loading={cal.loading} error={cal.error} />
+            <TodayEconAlert events={cal.events} loading={cal.loading} error={cal.error} />
           </div>
           <p className="text-xs text-gray-700 mt-auto pt-4 flex-shrink-0">Finnhub · 1시간 캐시</p>
         </div>
 
-        {/* 경제 캘린더 — 모바일 접힘 카드 (lg 미만) */}
+        {/* 오늘의 투자 기상 특보 — 모바일 접힘 카드 (lg 미만) */}
         <div className="card lg:hidden">
           <button
             onClick={() => setCalMobileOpen(o => !o)}
             className="flex items-center justify-between w-full"
           >
             <div className="flex items-center gap-2">
-              <CalendarDays className="w-4 h-4 text-brand-400" />
-              <span className="text-sm font-semibold text-slate-200 tracking-tight">경제 캘린더</span>
-              {cal.events.length > 0 && (
+              <AlertCircle className="w-4 h-4 text-brand-400" />
+              <span className="text-sm font-semibold text-slate-200 tracking-tight">오늘의 투자 기상 특보</span>
+              {cal.events.filter(ev => ev.date.slice(0, 10) === new Date().toISOString().slice(0, 10)).length > 0 && (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-brand-600/20 text-brand-400">
-                  {cal.events.length}건
+                  오늘 {cal.events.filter(ev => ev.date.slice(0, 10) === new Date().toISOString().slice(0, 10)).length}건
                 </span>
               )}
             </div>
@@ -1077,7 +1105,7 @@ export default function Dashboard() {
                 className="overflow-hidden"
               >
                 <div className="pt-4 border-t border-gray-800/50 mt-3">
-                  <EconCalendarView events={cal.events} loading={cal.loading} error={cal.error} />
+                  <TodayEconAlert events={cal.events} loading={cal.loading} error={cal.error} />
                 </div>
                 <p className="text-xs text-gray-700 pt-3">Finnhub · 1시간 캐시</p>
               </motion.div>
@@ -1179,7 +1207,12 @@ export default function Dashboard() {
                     tnx.data.changePercent > 0.3 ? 'bg-rose-500/10 text-rose-400'
                     : tnx.data.changePercent < -0.3 ? 'bg-emerald-500/10 text-emerald-400'
                     : 'bg-gray-800/60 text-slate-500'
-                  }`}>
+                  }`}
+                  style={{ borderLeft: `3px solid ${
+                    tnx.data.changePercent > 0.3 ? 'rgba(239,68,68,0.6)'
+                    : tnx.data.changePercent < -0.3 ? 'rgba(16,185,129,0.6)'
+                    : 'rgba(100,116,139,0.45)'
+                  }` }}>
                     {tnx.data.changePercent > 0.3 ? '📈 금리 상승세 — 성장주 부담 증가'
                       : tnx.data.changePercent < -0.3 ? '📉 금리 하락세 — 위험자산 선호 가능'
                       : '➡️ 금리 보합 — 시장 방향성 관망 중'}

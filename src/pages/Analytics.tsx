@@ -161,13 +161,13 @@ function AnalyticsSeedCard({ seed, krwRate, krwInvested, usdInvested, krwCash, u
   return (
     <div className="card space-y-4">
       <div className="flex items-center gap-2">
-        <Zap className="w-4 h-4 text-brand-400" />
-        <span className="text-sm font-semibold text-gray-200">시드머니 현황</span>
+        <Zap className="w-5 h-5 text-brand-400" />
+        <span className="text-base font-semibold text-slate-200 tracking-tight">시드머니 현황</span>
         {seedKRW > 0 && <span className="ml-auto text-[10px] text-gray-600">통합 <MoneyTip value={seedKRW} currency="KRW" /></span>}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {seed.krw > 0 && (
-          <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
+          <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2" style={{ borderLeft: '3px solid rgba(59,130,246,0.45)' }}>
             <div className="flex items-center gap-1.5">
               <span className="text-sm">🇰🇷</span>
               <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">원화 (KRW)</span>
@@ -195,7 +195,7 @@ function AnalyticsSeedCard({ seed, krwRate, krwInvested, usdInvested, krwCash, u
           </div>
         )}
         {seed.usd > 0 && (
-          <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
+          <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2" style={{ borderLeft: '3px solid rgba(16,185,129,0.45)' }}>
             <div className="flex items-center gap-1.5">
               <span className="text-sm">🇺🇸</span>
               <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">달러 (USD)</span>
@@ -270,7 +270,7 @@ const SectorRadarSection = React.memo(function SectorRadarSection({
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-1">
-        <p className="text-sm font-semibold text-gray-200">섹터 분포</p>
+        <p className="text-base font-semibold text-slate-200 tracking-tight">섹터 분포</p>
         {activeFilter && (
           <button onClick={() => onFilter(null)} className="flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors">
             <X className="w-3 h-3" />필터 해제
@@ -354,7 +354,7 @@ function DividendSection({ fundamentals }: { fundamentals: Map<string, Fundament
 
   return (
     <div className="card space-y-3">
-      <p className="text-sm font-semibold text-gray-200">배당 수익률</p>
+      <p className="text-base font-semibold text-slate-200 tracking-tight">배당 수익률</p>
       <div className="space-y-2">
         {items.map(f => (
           <div key={f.ticker} className="flex items-center gap-3">
@@ -391,7 +391,7 @@ function UpsideSection({ fundamentals }: { fundamentals: Map<string, Fundamental
 
   return (
     <div className="card space-y-3">
-      <p className="text-sm font-semibold text-gray-200">목표가 대비 상승여력 <span className="text-[10px] text-gray-600 font-normal ml-1">(DCF 기준)</span></p>
+      <p className="text-base font-semibold text-slate-200 tracking-tight">목표가 대비 상승여력 <span className="text-[10px] text-gray-600 font-normal ml-1">(DCF 기준)</span></p>
       <div className="space-y-2">
         {items.map(item => (
           <div key={item.ticker} className="flex items-center gap-3">
@@ -527,7 +527,7 @@ const TreemapSection = React.memo(function TreemapSection({ items }: { items: Tr
 
   return (
     <div className="card relative">
-      <p className="text-sm font-semibold text-gray-200 mb-3">종목별 비중</p>
+      <p className="text-base font-semibold text-slate-200 tracking-tight mb-3">종목별 비중</p>
       <div className="h-[190px] sm:h-[228px]" style={{ width: '100%' }}>
         <ResponsiveContainer width="100%" height="100%">
           <Treemap
@@ -619,7 +619,7 @@ function StackedBarAllocation({
   return (
     <div className="card space-y-3">
       <div className="flex items-center gap-2">
-        <p className="text-sm font-semibold text-gray-200">자산 배분</p>
+        <p className="text-base font-semibold text-slate-200 tracking-tight">자산 배분</p>
         {activeFilter && (
           <button onClick={() => onFilter(null)}
             className="ml-auto flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors">
@@ -761,16 +761,16 @@ function HeadlineInsight({
   }
 
   const LC = {
-    ok:   { icon: '✅', border: 'rgba(16,185,129,0.25)',  bg: 'rgba(16,185,129,0.07)',  text: '#34d399' },
-    warn: { icon: '⚠️', border: 'rgba(245,158,11,0.25)', bg: 'rgba(245,158,11,0.07)', text: '#fbbf24' },
-    bad:  { icon: '🔴', border: 'rgba(239,68,68,0.25)',  bg: 'rgba(239,68,68,0.07)',  text: '#f87171' },
-    info: { icon: '💡', border: 'rgba(99,102,241,0.25)', bg: 'rgba(99,102,241,0.07)', text: '#818cf8' },
+    ok:   { icon: '✅', border: 'rgba(16,185,129,0.25)',  bg: 'rgba(16,185,129,0.07)',  text: '#34d399', accent: 'rgba(16,185,129,0.65)'  },
+    warn: { icon: '⚠️', border: 'rgba(245,158,11,0.25)', bg: 'rgba(245,158,11,0.07)', text: '#fbbf24', accent: 'rgba(245,158,11,0.65)' },
+    bad:  { icon: '🔴', border: 'rgba(239,68,68,0.25)',  bg: 'rgba(239,68,68,0.07)',  text: '#f87171', accent: 'rgba(239,68,68,0.65)'  },
+    info: { icon: '💡', border: 'rgba(99,102,241,0.25)', bg: 'rgba(99,102,241,0.07)', text: '#818cf8', accent: 'rgba(99,102,241,0.65)' },
   }
   const lc = LC[level]
 
   return (
     <div className="rounded-2xl px-4 py-3.5"
-      style={{ background: lc.bg, border: `1px solid ${lc.border}` }}>
+      style={{ background: lc.bg, border: `1px solid ${lc.border}`, borderLeft: `3px solid ${lc.accent}` }}>
       <div className="flex items-start gap-3">
         <span className="text-xl leading-none flex-shrink-0 mt-0.5">{lc.icon}</span>
         <div>
@@ -822,8 +822,8 @@ function FilteredAssetTable({
   return (
     <div className="card space-y-3">
       <div className="flex items-center gap-2">
-        <SlidersHorizontal className="w-4 h-4 text-gray-500" />
-        <span className="text-sm font-semibold text-gray-200">보유 종목</span>
+        <SlidersHorizontal className="w-5 h-5 text-gray-500" />
+        <span className="text-base font-semibold text-slate-200 tracking-tight">보유 종목</span>
         {hasFilter && filterLabel && (
           <span className="text-[10px] px-2 py-0.5 rounded-full"
             style={{ background: 'rgba(108,99,255,0.12)', color: '#8B84FF', border: '1px solid rgba(108,99,255,0.22)' }}>
@@ -892,11 +892,11 @@ interface InsightItem {
   level: 'info' | 'warn' | 'ok' | 'bad'
 }
 
-const INSIGHT_STYLE: Record<InsightItem['level'], { bg: string; border: string }> = {
-  info: { bg: 'rgba(99,102,241,0.07)',  border: 'rgba(99,102,241,0.22)' },
-  warn: { bg: 'rgba(245,158,11,0.07)', border: 'rgba(245,158,11,0.22)' },
-  ok:   { bg: 'rgba(16,185,129,0.07)', border: 'rgba(16,185,129,0.22)' },
-  bad:  { bg: 'rgba(239,68,68,0.07)',  border: 'rgba(239,68,68,0.22)'  },
+const INSIGHT_STYLE: Record<InsightItem['level'], { bg: string; border: string; accent: string }> = {
+  info: { bg: 'rgba(99,102,241,0.07)',  border: 'rgba(99,102,241,0.22)', accent: 'rgba(99,102,241,0.65)'  },
+  warn: { bg: 'rgba(245,158,11,0.07)', border: 'rgba(245,158,11,0.22)', accent: 'rgba(245,158,11,0.65)' },
+  ok:   { bg: 'rgba(16,185,129,0.07)', border: 'rgba(16,185,129,0.22)', accent: 'rgba(16,185,129,0.65)'  },
+  bad:  { bg: 'rgba(239,68,68,0.07)',  border: 'rgba(239,68,68,0.22)',  accent: 'rgba(239,68,68,0.65)'   },
 }
 
 function PortfolioInsights({
@@ -1034,8 +1034,8 @@ function PortfolioInsights({
   return (
     <div className="card space-y-3">
       <div className="flex items-center gap-2">
-        <Lightbulb className="w-4 h-4 text-brand-400" />
-        <span className="text-sm font-semibold text-gray-200">포트폴리오 인사이트</span>
+        <Lightbulb className="w-5 h-5 text-brand-400" />
+        <span className="text-base font-semibold text-slate-200 tracking-tight">포트폴리오 인사이트</span>
         <span className="ml-auto text-[10px] text-gray-600">{ins.length}개 분석</span>
       </div>
       <div className="space-y-2">
@@ -1044,7 +1044,7 @@ function PortfolioInsights({
           return (
             <div key={i}
               className="flex items-start gap-3 rounded-xl px-3 py-2.5"
-              style={{ background: s.bg, border: `1px solid ${s.border}` }}>
+              style={{ background: s.bg, border: `1px solid ${s.border}`, borderLeft: `3px solid ${s.accent}` }}>
               <span className="text-base leading-none flex-shrink-0 mt-0.5">{item.emoji}</span>
               <p className="text-xs text-gray-300 leading-relaxed">{item.text}</p>
             </div>
@@ -1350,7 +1350,7 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
               ? <TreemapSection items={treemapItems} />
               : (
                 <div className="card">
-                  <p className="text-sm font-semibold text-gray-200 mb-3">종목별 비중</p>
+                  <p className="text-base font-semibold text-slate-200 tracking-tight mb-3">종목별 비중</p>
                   <Skel h="h-[268px]" />
                 </div>
               )
@@ -1360,7 +1360,7 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
               !chartsReady
                 ? (
                   <div className="card">
-                    <p className="text-sm font-semibold text-gray-200 mb-3">섹터 분포</p>
+                    <p className="text-base font-semibold text-slate-200 tracking-tight mb-3">섹터 분포</p>
                     <Skel h="h-[280px]" />
                   </div>
                 )
@@ -1405,7 +1405,7 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
       {hasTickerAssets && (
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-gray-200">실시간 평가손익</p>
+            <p className="text-base font-semibold text-slate-200 tracking-tight">실시간 평가손익</p>
             <button
               onClick={handleRefreshAll}
               disabled={isFetching}
@@ -1431,7 +1431,7 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
           {liveAssets.length > 0 && (
             <div className="space-y-2">
               {liveAssets.map(item => (
-                <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-800/50">
+                <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-800/50" style={{ borderLeft: '3px solid rgba(100,116,139,0.45)' }}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-sm text-gray-200 font-medium truncate">{item.name}</span>
@@ -1480,7 +1480,7 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
       {/* 실현손익 내역 */}
       {hasSells && plDetails.length > 0 && (
         <div className="card space-y-3">
-          <p className="text-sm font-semibold text-gray-200">실현손익 내역</p>
+          <p className="text-base font-semibold text-slate-200 tracking-tight">실현손익 내역</p>
           <div className="space-y-2">
             {plDetails.map(item => (
               <div key={item.id} className="flex items-center gap-3">

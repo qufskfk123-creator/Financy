@@ -205,7 +205,8 @@ function ControlMessage({ scores, hasSeed, hasAssets }: {
     : 'bg-rose-500/8   border-rose-500/25   text-rose-300'
 
   return (
-    <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${cls}`}>
+    <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${cls}`}
+      style={{ borderLeft: `3px solid ${level === 'safe' ? 'rgba(16,185,129,0.6)' : level === 'warn' ? 'rgba(245,158,11,0.6)' : 'rgba(244,63,94,0.6)'}` }}>
       <span className="text-base flex-shrink-0">{icon}</span>
       <p className="text-xs font-medium leading-relaxed">{text}</p>
     </div>
@@ -256,8 +257,8 @@ function DefenseScoreDashboard({ scores, hasSeed }: { scores: DefenseScores; has
     <div className={`card border ${rc.border} space-y-4`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <ShieldAlert className={`w-4 h-4 ${rc.text}`} />
-          <span className="text-sm font-semibold text-gray-200">3대 방어 지표</span>
+          <ShieldAlert className={`w-5 h-5 ${rc.text}`} />
+          <span className="text-base font-semibold text-slate-200 tracking-tight">3대 방어 지표</span>
         </div>
         <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${rc.bg} ${rc.border} border ${rc.text}`}>
           종합 {overall}점 · {rc.label}
@@ -287,7 +288,7 @@ function DefenseScoreDashboard({ scores, hasSeed }: { scores: DefenseScores; has
 
       {/* 집중 투자 경고 */}
       {scores.top3Pct > 50 && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/25">
+        <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/25" style={{ borderLeft: '3px solid rgba(249,115,22,0.6)' }}>
           <Flame className="w-3.5 h-3.5 text-orange-400 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-orange-300 leading-relaxed">
             상위 3개 종목({scores.top3Names.slice(0, 2).join(', ')}{scores.top3Names.length > 2 ? ' 외' : ''})이 시드의 {scores.top3Pct.toFixed(0)}%를 차지합니다. 분산 투자를 권장합니다.
@@ -342,7 +343,7 @@ function WarningSection({ seed, assets, fxRate, krwInvested, usdInvested, krwCas
     warnings.push({ icon: AlertTriangle, title: '달러 시드 초과', desc: `투자금($${usdInvested.toFixed(0)})이 달러 시드($${seed.usd})를 초과했습니다.`, level: 'warn' })
 
   if (warnings.length === 0) return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-500/8 border border-emerald-500/20">
+    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-500/8 border border-emerald-500/20" style={{ borderLeft: '3px solid rgba(16,185,129,0.6)' }}>
       <ShieldAlert className="w-4 h-4 text-emerald-400 flex-shrink-0" />
       <div>
         <p className="text-sm font-semibold text-emerald-300">경고 없음</p>
@@ -356,7 +357,8 @@ function WarningSection({ seed, assets, fxRate, krwInvested, usdInvested, krwCas
       {warnings.map((w, i) => {
         const rc = riskColor(w.level === 'danger' ? 20 : w.level === 'warn' ? 50 : 80)
         return (
-          <div key={i} className={`flex items-start gap-3 px-4 py-3.5 rounded-2xl border ${rc.bg} ${rc.border}`}>
+          <div key={i} className={`flex items-start gap-3 px-4 py-3.5 rounded-2xl border ${rc.bg} ${rc.border}`}
+            style={{ borderLeft: `3px solid ${rc.level === 'safe' ? 'rgba(16,185,129,0.6)' : rc.level === 'warn' ? 'rgba(245,158,11,0.6)' : 'rgba(244,63,94,0.6)'}` }}>
             <w.icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${rc.text}`} />
             <div>
               <p className={`text-sm font-bold ${rc.text}`}>{w.title}</p>
@@ -428,8 +430,8 @@ function AllocationBar({ assets, seed, fxRate, krwInvested, usdInvested, krwCash
   return (
     <div className="card space-y-4">
       <div className="flex items-center gap-2">
-        <BarChart2 className="w-4 h-4 text-brand-400" />
-        <span className="text-sm font-semibold text-gray-200">자산 배분</span>
+        <BarChart2 className="w-5 h-5 text-brand-400" />
+        <span className="text-base font-semibold text-slate-200 tracking-tight">자산 배분</span>
       </div>
 
       {hasKrw && (
@@ -529,8 +531,8 @@ function ConcentrationAnalysis({ assets, fxRate, seedKRW }: {
   return (
     <div className="card space-y-4">
       <div className="flex items-center gap-2">
-        <Layers className="w-4 h-4 text-brand-400" />
-        <span className="text-sm font-semibold text-gray-200">종목별 집중도</span>
+        <Layers className="w-5 h-5 text-brand-400" />
+        <span className="text-base font-semibold text-slate-200 tracking-tight">종목별 집중도</span>
         <span className="ml-auto text-[10px] text-gray-600">{seedKRW > 0 ? '통합 시드 대비' : '투자금 대비'}</span>
       </div>
       <div className="space-y-2.5">
@@ -595,8 +597,8 @@ function FxRiskAccordion({ fxRate, totalUsdExp, seedKRW }: {
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between gap-3 group">
         <div className="flex items-center gap-2">
-          <ArrowLeftRight className="w-4 h-4 text-sky-400" />
-          <span className="text-sm font-semibold text-gray-200">외환 리스크 분석</span>
+          <ArrowLeftRight className="w-5 h-5 text-sky-400" />
+          <span className="text-base font-semibold text-slate-200 tracking-tight">외환 리스크 분석</span>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400">
             달러 노출 <MoneyTip value={totalUsdExp} currency="USD" />
           </span>
@@ -614,11 +616,11 @@ function FxRiskAccordion({ fxRate, totalUsdExp, seedKRW }: {
         <div className="mt-4 pt-4 border-t border-gray-800 space-y-4">
           {/* 현재 환율 + 노출 요약 */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-sky-500/10 border border-sky-500/25 px-4 py-3">
+            <div className="rounded-xl bg-sky-500/10 border border-sky-500/25 px-4 py-3" style={{ borderLeft: '3px solid rgba(14,165,233,0.6)' }}>
               <p className="text-[10px] text-gray-500 mb-1">현재 USD/KRW</p>
               <p className="text-xl font-bold mono text-sky-300">{fxRate.toLocaleString('ko-KR')}원</p>
             </div>
-            <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
+            <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/25 px-4 py-3" style={{ borderLeft: '3px solid rgba(16,185,129,0.6)' }}>
               <p className="text-[10px] text-gray-500 mb-1">달러 총 노출액</p>
               <p className="text-base font-bold mono text-emerald-300"><MoneyTip value={totalUsdExp} currency="USD" /></p>
               <p className="text-[10px] text-gray-600 mono"><MoneyTip value={totalUsdKRW} currency="KRW" /></p>
@@ -641,7 +643,8 @@ function FxRiskAccordion({ fxRate, totalUsdExp, seedKRW }: {
                   isGain
                     ? isCore ? 'bg-emerald-500/12 border-emerald-500/30' : 'bg-emerald-500/5 border-emerald-500/12'
                     : isCore ? 'bg-rose-500/12    border-rose-500/30'    : 'bg-rose-500/5    border-rose-500/12'
-                }`}>
+                }`}
+                  style={{ borderLeft: `3px solid ${isGain ? 'rgba(16,185,129,0.6)' : 'rgba(244,63,94,0.6)'}` }}>
                   <span className={`text-xs font-bold w-[52px] flex-shrink-0 mono ${isGain ? 'text-emerald-400' : 'text-rose-400'} ${isCore ? '' : 'opacity-60'}`}>
                     {pct > 0 ? '+' : ''}{pct}%
                   </span>
@@ -675,25 +678,25 @@ const MDD_SCENARIOS = [
     name: '2008 금융위기',    sub: 'Global Financial Crisis', year: '2008–09',
     emoji: '🏦', barColor: 'bg-rose-500',
     drawdowns: { 'K-Stock': 54, 'U-Stock': 56, 'Crypto': 0,  'Cash': 0 } as Record<string, number>,
-    color: 'text-rose-500',   bg: 'bg-rose-600/10 border-rose-600/25',
+    color: 'text-rose-500',   bg: 'bg-rose-600/10 border-rose-600/25', accent: 'rgba(239,68,68,0.65)',
   },
   {
     name: '2020 코로나 충격', sub: 'COVID-19 Crash',          year: '2020.02–03',
     emoji: '🦠', barColor: 'bg-orange-400',
     drawdowns: { 'K-Stock': 36, 'U-Stock': 34, 'Crypto': 50, 'Cash': 0 } as Record<string, number>,
-    color: 'text-orange-400', bg: 'bg-orange-500/8 border-orange-500/20',
+    color: 'text-orange-400', bg: 'bg-orange-500/8 border-orange-500/20', accent: 'rgba(251,146,60,0.65)',
   },
   {
     name: '2022 긴축 쇼크',   sub: 'Fed Rate Hike Crisis',    year: '2022.01–12',
     emoji: '📈', barColor: 'bg-amber-400',
     drawdowns: { 'K-Stock': 26, 'U-Stock': 19, 'Crypto': 75, 'Cash': 0 } as Record<string, number>,
-    color: 'text-amber-400',  bg: 'bg-amber-500/8 border-amber-500/20',
+    color: 'text-amber-400',  bg: 'bg-amber-500/8 border-amber-500/20', accent: 'rgba(251,191,36,0.65)',
   },
   {
     name: '닷컴버블 붕괴',    sub: 'Dot-com Bubble',          year: '2000–02',
     emoji: '💻', barColor: 'bg-violet-400',
     drawdowns: { 'K-Stock': 55, 'U-Stock': 49, 'Crypto': 0,  'Cash': 0 } as Record<string, number>,
-    color: 'text-violet-400', bg: 'bg-violet-500/8 border-violet-500/20',
+    color: 'text-violet-400', bg: 'bg-violet-500/8 border-violet-500/20', accent: 'rgba(167,139,250,0.65)',
   },
 ] as const
 
@@ -709,8 +712,8 @@ function MddSection({ assets, krwRate, open, onToggle }: {
   return (
     <div className="card space-y-4">
       <button onClick={onToggle} className="w-full flex items-center gap-2 text-left">
-        <TrendingDown className="w-4 h-4 text-rose-400 flex-shrink-0" />
-        <p className="text-sm font-semibold text-gray-200">역사적 위기 시뮬레이션 (MDD)</p>
+        <TrendingDown className="w-5 h-5 text-rose-400 flex-shrink-0" />
+        <p className="text-base font-semibold text-slate-200 tracking-tight">역사적 위기 시뮬레이션 (MDD)</p>
         <span className="text-[10px] text-gray-600 font-normal ml-1">내 비중 적용</span>
         <ChevronDown className={`w-4 h-4 text-gray-500 ml-auto flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -729,7 +732,7 @@ function MddSection({ assets, krwRate, open, onToggle }: {
           const afterKRW = portfolioKRW - lossKRW
           const lossPct  = portfolioKRW > 0 ? (lossKRW / portfolioKRW) * 100 : 0
           return (
-            <div key={i} className={`rounded-xl border px-4 py-3.5 ${s.bg}`}>
+            <div key={i} className={`rounded-xl border px-4 py-3.5 ${s.bg}`} style={{ borderLeft: `3px solid ${s.accent}` }}>
               <div className="flex items-start justify-between gap-2 mb-2.5">
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -779,13 +782,13 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
   return (
     <div className="card space-y-4">
       <div className="flex items-center gap-2">
-        <Zap className="w-4 h-4 text-brand-400" />
-        <span className="text-sm font-semibold text-gray-200">시드머니 현황</span>
+        <Zap className="w-5 h-5 text-brand-400" />
+        <span className="text-base font-semibold text-slate-200 tracking-tight">시드머니 현황</span>
         {hasSeed && <span className="ml-auto text-[10px] text-gray-600">통합 <MoneyTip value={seedKRW} currency="KRW" /></span>}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
+        <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2" style={{ borderLeft: '3px solid rgba(59,130,246,0.45)' }}>
           <div className="flex items-center gap-1.5">
             <span className="text-sm">🇰🇷</span>
             <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">원화 (KRW)</span>
@@ -823,7 +826,7 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
           )}
         </div>
 
-        <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
+        <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2" style={{ borderLeft: '3px solid rgba(16,185,129,0.45)' }}>
           <div className="flex items-center gap-1.5">
             <span className="text-sm">🇺🇸</span>
             <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">달러 (USD)</span>
@@ -916,8 +919,8 @@ function RiskScoreCard({ assets }: { assets: Asset[] }) {
   return (
     <div className={`card border ${rc.border} space-y-4`}>
       <div className="flex items-center gap-2">
-        <ShieldAlert className={`w-4 h-4 ${rc.text}`} />
-        <span className="text-sm font-semibold text-gray-200">시장 연동 리스크 지수</span>
+        <ShieldAlert className={`w-5 h-5 ${rc.text}`} />
+        <span className="text-base font-semibold text-slate-200 tracking-tight">시장 연동 리스크 지수</span>
         {loading && <span className="ml-auto text-[10px] text-gray-600 animate-pulse">분석 중…</span>}
       </div>
       <div className="flex items-center gap-5">
@@ -1015,7 +1018,7 @@ export default function RiskCenter({ seed, userId }: { seed: SeedData; userId: s
 
       {/* 시드 미설정 안내 */}
       {!hasSeed && (
-        <div className="flex items-start gap-3 px-4 py-3.5 rounded-2xl bg-brand-500/8 border border-brand-500/20">
+        <div className="flex items-start gap-3 px-4 py-3.5 rounded-2xl bg-brand-500/8 border border-brand-500/20" style={{ borderLeft: '3px solid rgba(108,99,255,0.6)' }}>
           <DollarSign className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-brand-300">시드머니를 설정해 주세요</p>

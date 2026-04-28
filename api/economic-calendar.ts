@@ -50,7 +50,7 @@ async function fetchFinnhub(date: string): Promise<EconEvent[] | null> {
     return (items as any[])
       .filter(e => e.country === 'US' || e.country === 'KR')  // US / KR 필터
       .map(e => ({
-        date:     `${date} ${String(e.time ?? '00:00:00').slice(0, 8)}`,
+        date:     `${date} ${(String(e.time ?? '').match(/\d{2}:\d{2}(?::\d{2})?/) ?? ['00:00:00'])[0]}`,
         country:  String(e.country ?? ''),
         event:    String(e.event   ?? ''),
         currency: COUNTRY_CURRENCY[e.country] ?? 'USD',

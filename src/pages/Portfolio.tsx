@@ -287,7 +287,7 @@ function SeedInput({ seed, onChange }: { seed: SeedData; onChange: (v: SeedData)
   return (
     <div className="card !py-4 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">총 투자 시드머니</p>
+        <p className="text-base font-semibold text-slate-200 tracking-tight">총 투자 시드머니</p>
         {hasSeed && (
           <div className="text-right">
             <p className="text-[10px] text-gray-600">통합 자산가치 (KRW 환산)</p>
@@ -300,7 +300,7 @@ function SeedInput({ seed, onChange }: { seed: SeedData; onChange: (v: SeedData)
 
       <div className="grid grid-cols-2 gap-3">
         {/* 원화 시드 */}
-        <div className="rounded-xl bg-blue-500/8 border border-blue-500/20 px-3 py-2.5 space-y-1.5">
+        <div className="rounded-xl bg-slate-500/8 border border-slate-500/20 px-3 py-2.5 space-y-1.5" style={{ borderLeft: '3px solid rgba(59,130,246,0.55)' }}>
           <div className="flex items-center gap-1">
             <span className="text-[11px]">🇰🇷</span>
             <p className="text-[10px] text-blue-400 font-semibold">원화 시드 (KRW)</p>
@@ -325,7 +325,7 @@ function SeedInput({ seed, onChange }: { seed: SeedData; onChange: (v: SeedData)
         </div>
 
         {/* 달러 시드 */}
-        <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/20 px-3 py-2.5 space-y-1.5">
+        <div className="rounded-xl bg-slate-500/8 border border-slate-500/20 px-3 py-2.5 space-y-1.5" style={{ borderLeft: '3px solid rgba(16,185,129,0.55)' }}>
           <div className="flex items-center gap-1">
             <span className="text-[11px]">🇺🇸</span>
             <p className="text-[10px] text-emerald-400 font-semibold">달러 시드 (USD)</p>
@@ -411,7 +411,7 @@ function AllocationBar({ assets, seed }: { assets: Asset[]; seed: SeedData }) {
 
   return (
     <div className="card space-y-4">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">자산 배분</p>
+      <p className="text-base font-semibold text-slate-200 tracking-tight">자산 배분</p>
 
       {/* ── 원화 자산 바 ── */}
       {hasKrw && (
@@ -675,7 +675,7 @@ function AddAssetForm({ onAdd, onClose }: {
             </div>
           </div>
           {autoTotal !== null && (
-            <div className="space-y-2 bg-gray-800/70 rounded-xl px-4 py-3">
+            <div className="space-y-2 bg-gray-800/70 rounded-xl px-4 py-3" style={{ borderLeft: '3px solid rgba(100,116,139,0.45)' }}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-gray-500">총 투자금액</span>
@@ -762,7 +762,8 @@ function AddMoreForm({ asset, onConfirm, onCancel }: {
       </div>
 
       {preview && (
-        <div className={`rounded-xl border px-4 py-3 space-y-2.5 ${isBuyDown ? 'bg-emerald-500/8 border-emerald-500/20' : isBuyUp ? 'bg-amber-500/8 border-amber-500/20' : 'bg-gray-800/60 border-gray-700'}`}>
+        <div className={`rounded-xl border px-4 py-3 space-y-2.5 ${isBuyDown ? 'bg-emerald-500/8 border-emerald-500/20' : isBuyUp ? 'bg-amber-500/8 border-amber-500/20' : 'bg-gray-800/60 border-gray-700'}`}
+          style={{ borderLeft: `3px solid ${isBuyDown ? 'rgba(16,185,129,0.6)' : isBuyUp ? 'rgba(245,158,11,0.6)' : 'rgba(100,116,139,0.45)'}` }}>
           <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">추가매수 후 예상</p>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -860,7 +861,8 @@ function SellForm({ asset, onConfirm, onCancel }: {
 
       {/* 손익 미리보기 */}
       {preview && (
-        <div className={`rounded-xl border px-4 py-3 space-y-3 ${isProfit ? 'bg-emerald-500/8 border-emerald-500/20' : isLoss ? 'bg-rose-500/8 border-rose-500/20' : 'bg-gray-800/60 border-gray-700'}`}>
+        <div className={`rounded-xl border px-4 py-3 space-y-3 ${isProfit ? 'bg-emerald-500/8 border-emerald-500/20' : isLoss ? 'bg-rose-500/8 border-rose-500/20' : 'bg-gray-800/60 border-gray-700'}`}
+          style={{ borderLeft: `3px solid ${isProfit ? 'rgba(16,185,129,0.6)' : isLoss ? 'rgba(239,68,68,0.6)' : 'rgba(100,116,139,0.45)'}` }}>
           <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">매도 손익 분석</p>
 
           {/* 핵심 지표 3개 */}
@@ -1010,7 +1012,7 @@ function EditEntryModal({ entry, asset, entryIndex, onSave, onDelete, onClose }:
 
           {/* 소계 오버라이드 */}
           {autoTotal !== null && (
-            <div className="bg-gray-800/60 rounded-xl px-4 py-3 space-y-2">
+            <div className="bg-gray-800/60 rounded-xl px-4 py-3 space-y-2" style={{ borderLeft: '3px solid rgba(100,116,139,0.4)' }}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-gray-500">자동 소계</span>
                 <span className="text-sm font-bold mono text-gray-200">
@@ -1294,7 +1296,7 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
           )}
 
           {/* ▸ 현재 보유 현황 요약 */}
-          <div className="rounded-xl bg-gray-800/50 border border-gray-700/50 px-4 py-3">
+          <div className="rounded-xl bg-gray-800/50 border border-gray-700/50 px-4 py-3" style={{ borderLeft: '3px solid rgba(100,116,139,0.45)' }}>
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">현재 보유 현황</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
@@ -1555,7 +1557,7 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
 
       {/* DB 저장 실패 배너 */}
       {dbSaveErr && userId && (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-3.5 flex items-start gap-3">
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-3.5 flex items-start gap-3" style={{ borderLeft: '3px solid rgba(245,158,11,0.6)' }}>
           <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-amber-300">클라우드 저장 실패</p>
@@ -1570,7 +1572,7 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
 
       {/* 마이그레이션 배너 */}
       {migrationPrompt && userId && (
-        <div className="rounded-2xl border border-brand-500/30 bg-brand-500/10 px-5 py-4">
+        <div className="rounded-2xl border border-brand-500/30 bg-brand-500/10 px-5 py-4" style={{ borderLeft: '3px solid rgba(108,99,255,0.6)' }}>
           <div className="flex items-start gap-4">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-brand-300">기존 데이터를 계정으로 가져올까요?</p>
@@ -1637,8 +1639,8 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
           {hasPL && (
             <div className={`rounded-2xl border px-5 py-3.5 flex items-center justify-between ${grandPL >= 0 ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-rose-500/8 border-rose-500/20'}`}>
               <div className="flex items-center gap-2">
-                {grandPL >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <TrendingDown className="w-4 h-4 text-rose-400" />}
-                <span className="text-sm font-semibold text-gray-300">전체 실현 손익</span>
+                {grandPL >= 0 ? <TrendingUp className="w-5 h-5 text-emerald-400" /> : <TrendingDown className="w-5 h-5 text-rose-400" />}
+                <span className="text-base font-semibold text-slate-200 tracking-tight">전체 실현 손익</span>
               </div>
               <div className="text-right">
                 <p className={`text-lg font-bold mono ${grandPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -1675,7 +1677,7 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
 
           {assets.length > 0 && (
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">보유 자산</p>
+              <p className="text-base font-semibold text-slate-200 tracking-tight">보유 자산</p>
               <div className="flex items-center gap-3">
                 {userId && (
                   <span className="text-[10px] text-gray-700 flex items-center gap-1">
