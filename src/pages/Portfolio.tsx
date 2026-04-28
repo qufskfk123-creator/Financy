@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { MoneyTip } from '../components/MoneyTip'
 import type { Transaction } from '../lib/transactions'
 import type { SeedData } from '../lib/seed'
 import {
@@ -222,12 +223,6 @@ function saveAssets(assets: Asset[]) {
 
 // ── Formatters ─────────────────────────────────────────────
 
-function fmtMoney(value: number, currency: 'KRW' | 'USD'): string {
-  return currency === 'KRW'
-    ? `₩${value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}`
-    : `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
 function fmtQty(value: number, market: MarketType): string {
   const unit = market === 'Crypto' ? '개' : market === 'Cash' ? '' : '주'
   const n = market === 'Crypto'
@@ -293,7 +288,7 @@ function SeedInput({ seed, onChange }: { seed: SeedData; onChange: (v: SeedData)
           <div className="text-right">
             <p className="text-[10px] text-gray-600">통합 자산가치 (KRW 환산)</p>
             <p className="text-sm font-bold mono text-brand-400">
-              ₩{totalKRW.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+              <MoneyTip value={totalKRW} currency="KRW" />
             </p>
           </div>
         )}
@@ -319,7 +314,7 @@ function SeedInput({ seed, onChange }: { seed: SeedData; onChange: (v: SeedData)
           ) : (
             <button onClick={startKrw} className="w-full text-left group">
               <p className={`text-base font-bold mono ${seed.krw > 0 ? 'text-blue-300 group-hover:text-blue-200' : 'text-blue-700 group-hover:text-blue-600'}`}>
-                {seed.krw > 0 ? `₩${seed.krw.toLocaleString('ko-KR')}` : '+ 입력'}
+                {seed.krw > 0 ? <MoneyTip value={seed.krw} currency="KRW" /> : '+ 입력'}
               </p>
             </button>
           )}
@@ -344,7 +339,7 @@ function SeedInput({ seed, onChange }: { seed: SeedData; onChange: (v: SeedData)
           ) : (
             <button onClick={startUsd} className="w-full text-left group">
               <p className={`text-base font-bold mono ${seed.usd > 0 ? 'text-emerald-300 group-hover:text-emerald-200' : 'text-emerald-700 group-hover:text-emerald-600'}`}>
-                {seed.usd > 0 ? `$${seed.usd.toLocaleString('en-US')}` : '+ 입력'}
+                {seed.usd > 0 ? <MoneyTip value={seed.usd} currency="USD" /> : '+ 입력'}
               </p>
             </button>
           )}
@@ -423,8 +418,8 @@ function AllocationBar({ assets, seed }: { assets: Asset[]; seed: SeedData }) {
               <span className="font-semibold text-blue-400">원화 자산 (KRW)</span>
             </div>
             <div className="flex items-center gap-2 text-gray-500">
-              <span className="mono">투자 ₩{krwInvested.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
-              {krwCash > 0 && <span className="mono text-gray-600">잔여 ₩{krwCash.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>}
+              <span className="mono">투자 <MoneyTip value={krwInvested} currency="KRW" /></span>
+              {krwCash > 0 && <span className="mono text-gray-600">잔여 <MoneyTip value={krwCash} currency="KRW" /></span>}
               {seed.krw > 0 && (
                 <span className={`font-semibold ${krwInvested > seed.krw ? 'text-amber-400' : 'text-blue-400'}`}>
                   {Math.min(999, krwInvested / krwDenom * 100).toFixed(1)}%
@@ -471,8 +466,8 @@ function AllocationBar({ assets, seed }: { assets: Asset[]; seed: SeedData }) {
               <span className="font-semibold text-emerald-400">달러 자산 (USD)</span>
             </div>
             <div className="flex items-center gap-2 text-gray-500">
-              <span className="mono">투자 ${usdInvested.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-              {usdCash > 0 && <span className="mono text-gray-600">잔여 ${usdCash.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>}
+              <span className="mono">투자 <MoneyTip value={usdInvested} currency="USD" /></span>
+              {usdCash > 0 && <span className="mono text-gray-600">잔여 <MoneyTip value={usdCash} currency="USD" /></span>}
               {seed.usd > 0 && (
                 <span className={`font-semibold ${usdInvested > seed.usd ? 'text-amber-400' : 'text-emerald-400'}`}>
                   {Math.min(999, usdInvested / usdDenom * 100).toFixed(1)}%
@@ -685,7 +680,7 @@ function AddAssetForm({ onAdd, onClose }: {
                   )}
                 </div>
                 <span className={`text-sm font-bold mono ${hasOverride ? 'text-amber-300' : 'text-gray-200'}`}>
-                  {fmtMoney(effectiveTotal ?? 0, cfg.currency)}
+                  <MoneyTip value={effectiveTotal ?? 0} currency={cfg.currency} />
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -768,11 +763,11 @@ function AddMoreForm({ asset, onConfirm, onCancel }: {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <p className="text-[10px] text-gray-600 mb-0.5">기존 평단가</p>
-              <p className="text-xs font-semibold text-gray-400 mono">{fmtMoney(avgBuyPrice(asset), cfg.currency)}</p>
+              <p className="text-xs font-semibold text-gray-400 mono"><MoneyTip value={avgBuyPrice(asset)} currency={cfg.currency} /></p>
             </div>
             <div>
               <p className="text-[10px] text-gray-600 mb-0.5">새 평단가</p>
-              <p className={`text-sm font-bold mono ${isBuyDown ? 'text-emerald-400' : isBuyUp ? 'text-amber-400' : 'text-gray-200'}`}>{fmtMoney(preview.newAvg, cfg.currency)}</p>
+              <p className={`text-sm font-bold mono ${isBuyDown ? 'text-emerald-400' : isBuyUp ? 'text-amber-400' : 'text-gray-200'}`}><MoneyTip value={preview.newAvg} currency={cfg.currency} /></p>
             </div>
             <div>
               <p className="text-[10px] text-gray-600 mb-0.5">변화</p>
@@ -868,12 +863,12 @@ function SellForm({ asset, onConfirm, onCancel }: {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <p className="text-[10px] text-gray-600 mb-0.5">매도금액</p>
-              <p className="text-sm font-bold text-gray-200 mono">{fmtMoney(preview.revenue, cfg.currency)}</p>
+              <p className="text-sm font-bold text-gray-200 mono"><MoneyTip value={preview.revenue} currency={cfg.currency} /></p>
             </div>
             <div>
               <p className="text-[10px] text-gray-600 mb-0.5">실현 손익</p>
               <p className={`text-sm font-bold mono ${isProfit ? 'text-emerald-400' : isLoss ? 'text-rose-400' : 'text-gray-400'}`}>
-                {preview.pl >= 0 ? '+' : ''}{fmtMoney(Math.abs(preview.pl), cfg.currency)}
+                {preview.pl >= 0 ? '+' : ''}<MoneyTip value={Math.abs(preview.pl)} currency={cfg.currency} />
               </p>
             </div>
             <div>
@@ -890,15 +885,15 @@ function SellForm({ asset, onConfirm, onCancel }: {
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-gray-600">단가 비교</span>
               <span className="text-[10px] mono text-gray-400">
-                평단 {fmtMoney(avg, cfg.currency)}
+                평단 <MoneyTip value={avg} currency={cfg.currency} />
                 <span className="text-gray-600 mx-1.5">→</span>
-                매도가 <span className={isProfit ? 'text-emerald-400' : isLoss ? 'text-rose-400' : 'text-gray-300'}>{fmtMoney(p, cfg.currency)}</span>
+                매도가 <span className={isProfit ? 'text-emerald-400' : isLoss ? 'text-rose-400' : 'text-gray-300'}><MoneyTip value={p} currency={cfg.currency} /></span>
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-gray-600">단위 손익</span>
               <span className={`text-[10px] font-semibold mono ${isProfit ? 'text-emerald-400' : isLoss ? 'text-rose-400' : 'text-gray-500'}`}>
-                {p - avg >= 0 ? '+' : ''}{fmtMoney(Math.abs(p - avg), cfg.currency)} / 1{asset.market === 'Crypto' ? '개' : asset.market === 'Cash' ? '' : '주'}
+                {p - avg >= 0 ? '+' : ''}<MoneyTip value={Math.abs(p - avg)} currency={cfg.currency} /> / 1{asset.market === 'Crypto' ? '개' : asset.market === 'Cash' ? '' : '주'}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -1030,10 +1025,10 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className="text-xs text-gray-300 mono font-medium">{fmtQty(hQty, asset.market)}</span>
             <span className="text-xs text-gray-600">×</span>
-            <span className="text-xs text-gray-500 mono">평단 {fmtMoney(avg, currency)}</span>
+            <span className="text-xs text-gray-500 mono">평단 <MoneyTip value={avg} currency={currency} /></span>
             {hasSells && (
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md mono ${realPL >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>
-                실현 {realPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(realPL), currency)}
+                실현 {realPL >= 0 ? '+' : ''}<MoneyTip value={Math.abs(realPL)} currency={currency} />
               </span>
             )}
           </div>
@@ -1041,7 +1036,7 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="text-right hidden sm:block">
-            <p className="text-sm font-semibold text-gray-200 mono">{fmtMoney(hCost, currency)}</p>
+            <p className="text-sm font-semibold text-gray-200 mono"><MoneyTip value={hCost} currency={currency} /></p>
             <p className="text-[10px] text-gray-600">투입금액</p>
           </div>
           {/* 화살표 — 클릭 이벤트는 부모 div가 처리 */}
@@ -1068,7 +1063,7 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
       {/* 모바일 투입금액 */}
       <div className="sm:hidden px-4 pb-2.5 flex items-center justify-between">
         <span className="text-xs text-gray-600">투입금액</span>
-        <span className="text-sm font-semibold text-gray-200 mono">{fmtMoney(hCost, currency)}</span>
+        <span className="text-sm font-semibold text-gray-200 mono"><MoneyTip value={hCost} currency={currency} /></span>
       </div>
 
       {/* ── 펼침 영역 ── */}
@@ -1138,8 +1133,8 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
                     <span className="text-xs text-gray-500">{fmtDate(e.date)}</span>
                   </div>
                   <span className="text-xs text-gray-300 mono">{fmtQty(e.quantity, asset.market)}</span>
-                  <span className="text-xs text-gray-400 mono">{fmtMoney(e.price, currency)}</span>
-                  <span className="text-xs text-gray-300 mono">{fmtMoney(e.totalAmount ?? round2(e.quantity * e.price), currency)}</span>
+                  <span className="text-xs text-gray-400 mono"><MoneyTip value={e.price} currency={currency} /></span>
+                  <span className="text-xs text-gray-300 mono"><MoneyTip value={e.totalAmount ?? round2(e.quantity * e.price)} currency={currency} /></span>
                   <div className="flex items-center gap-0.5">
                     <button onClick={ev => { ev.stopPropagation(); startEdit(e) }}
                       className="w-5 h-5 rounded flex items-center justify-center text-gray-700 hover:text-brand-400 hover:bg-brand-500/10 opacity-0 group-hover:opacity-100 transition-all">
@@ -1157,8 +1152,8 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
             <div className="grid grid-cols-[1.2fr_1fr_1fr_1.2fr_auto] gap-2 items-center pt-2 mt-0.5 border-t border-gray-800">
               <span className="text-[10px] text-gray-500 font-semibold">합계</span>
               <span className="text-xs font-bold text-gray-200 mono">{fmtQty(totalBuyQty(asset), asset.market)}</span>
-              <span className="text-xs font-bold text-gray-200 mono">{fmtMoney(avg, currency)}</span>
-              <span className="text-xs font-bold text-gray-200 mono">{fmtMoney(totalInvested(asset), currency)}</span>
+              <span className="text-xs font-bold text-gray-200 mono"><MoneyTip value={avg} currency={currency} /></span>
+              <span className="text-xs font-bold text-gray-200 mono"><MoneyTip value={totalInvested(asset)} currency={currency} /></span>
               <span />
             </div>
           </div>
@@ -1182,10 +1177,10 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
                       <span className="text-xs text-gray-500">{fmtDate(s.date)}</span>
                     </div>
                     <span className="text-xs text-gray-300 mono">{fmtQty(s.quantity, asset.market)}</span>
-                    <span className="text-xs text-gray-400 mono">{fmtMoney(s.price, currency)}</span>
+                    <span className="text-xs text-gray-400 mono"><MoneyTip value={s.price} currency={currency} /></span>
                     <div className="flex flex-col">
                       <span className={`text-xs font-semibold mono ${profit ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {pl >= 0 ? '+' : ''}{fmtMoney(Math.abs(pl), currency)}
+                        {pl >= 0 ? '+' : ''}<MoneyTip value={Math.abs(pl)} currency={currency} />
                       </span>
                       <span className={`text-[10px] mono ${profit ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {fmtPct(plPct)}
@@ -1205,7 +1200,7 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
                 <span />
                 <div className="flex flex-col">
                   <span className={`text-xs font-bold mono ${realPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {realPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(realPL), currency)}
+                    {realPL >= 0 ? '+' : ''}<MoneyTip value={Math.abs(realPL)} currency={currency} />
                   </span>
                   {totalInvested(asset) > 0 && (
                     <span className={`text-[10px] mono ${realPL >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -1228,11 +1223,11 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
               </div>
               <div>
                 <p className="text-[10px] text-gray-600 mb-0.5">보유 평단</p>
-                <p className="text-sm font-bold text-gray-200 mono">{fmtMoney(avg, currency)}</p>
+                <p className="text-sm font-bold text-gray-200 mono"><MoneyTip value={avg} currency={currency} /></p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-600 mb-0.5">투입 금액</p>
-                <p className="text-sm font-bold text-gray-200 mono">{fmtMoney(hCost, currency)}</p>
+                <p className="text-sm font-bold text-gray-200 mono"><MoneyTip value={hCost} currency={currency} /></p>
               </div>
             </div>
           </div>
@@ -1548,7 +1543,7 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
               </div>
               <div className="text-right">
                 <p className={`text-lg font-bold mono ${grandPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {grandPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(grandPL), 'KRW')}
+                  {grandPL >= 0 ? '+' : ''}<MoneyTip value={Math.abs(grandPL)} currency="KRW" />
                 </p>
                 <p className="text-[10px] text-gray-600">매도 완료 기준 누적</p>
               </div>
@@ -1566,11 +1561,11 @@ export default function Portfolio({ onTransaction, userId, seed, onSeedChange }:
                       <span className="text-base leading-none">{cfg.emoji}</span>
                       <span className={`text-[10px] font-semibold ${cfg.textCls}`}>{cfg.label}</span>
                     </div>
-                    <p className={`text-sm font-bold mono ${cfg.textCls}`}>{fmtMoney(totalHolding, cfg.currency)}</p>
+                    <p className={`text-sm font-bold mono ${cfg.textCls}`}><MoneyTip value={totalHolding} currency={cfg.currency} /></p>
                     <p className="text-[10px] text-gray-600 mt-0.5">{count}개 종목</p>
                     {hasMktPL && (
                       <p className={`text-[10px] font-semibold mono mt-1 ${totalPL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        실현 {totalPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(totalPL), cfg.currency)}
+                        실현 {totalPL >= 0 ? '+' : ''}<MoneyTip value={Math.abs(totalPL)} currency={cfg.currency} />
                       </p>
                     )}
                   </div>

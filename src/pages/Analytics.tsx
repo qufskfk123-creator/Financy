@@ -3,7 +3,8 @@
  * 자산 배분, 실현손익, 실시간 평가손익, 섹터 분석, 역사적 MDD 시뮬레이션
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { MoneyTip } from '../components/MoneyTip'
 import { createPortal } from 'react-dom'
 import {
   ResponsiveContainer, Treemap,
@@ -112,22 +113,8 @@ const SECTOR_KR: Record<string, string> = {
 
 // ── Formatters ─────────────────────────────────────────────
 
-function fmtMoney(v: number, currency: 'KRW' | 'USD'): string {
-  return currency === 'KRW'
-    ? `₩${Math.round(v).toLocaleString('ko-KR')}`
-    : `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
 function fmtPct(n: number): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
-}
-
-function fmtMan(v: number): string {
-  const abs = Math.abs(v)
-  const sign = v < 0 ? '-' : ''
-  if (abs >= 100_000_000) return `${sign}₩${(abs / 100_000_000).toFixed(1)}억`
-  if (abs >= 10_000)      return `${sign}₩${Math.round(abs / 10_000).toLocaleString('ko-KR')}만`
-  return `${sign}₩${Math.round(abs).toLocaleString('ko-KR')}`
 }
 
 // ── Sub-components ─────────────────────────────────────────
@@ -137,7 +124,7 @@ function Skel({ w, h }: { w?: string; h: string }) {
 }
 
 function StatCard({ label, value, sub, rising }: {
-  label: string; value: string; sub?: string; rising?: boolean | null
+  label: string; value: React.ReactNode; sub?: string; rising?: boolean | null
 }) {
   const valueColor = rising === true ? 'text-rise' : rising === false ? 'text-fall' : 'text-white'
   return (
@@ -176,7 +163,7 @@ function AnalyticsSeedCard({ seed, krwRate, krwInvested, usdInvested, krwCash, u
       <div className="flex items-center gap-2">
         <Zap className="w-4 h-4 text-brand-400" />
         <span className="text-sm font-semibold text-gray-200">시드머니 현황</span>
-        {seedKRW > 0 && <span className="ml-auto text-[10px] text-gray-600">통합 {fmtMan(seedKRW)}</span>}
+        {seedKRW > 0 && <span className="ml-auto text-[10px] text-gray-600">통합 <MoneyTip value={seedKRW} currency="KRW" /></span>}
       </div>
       <div className="grid grid-cols-2 gap-3">
         {seed.krw > 0 && (
@@ -188,17 +175,17 @@ function AnalyticsSeedCard({ seed, krwRate, krwInvested, usdInvested, krwCash, u
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <p className="text-[10px] text-gray-600 mb-0.5">시드</p>
-                <p className="text-sm font-bold mono text-blue-300">{fmtMan(seed.krw)}</p>
+                <p className="text-sm font-bold mono text-blue-300"><MoneyTip value={seed.krw} currency="KRW" /></p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-600 mb-0.5">투자금</p>
-                <p className="text-sm font-bold mono text-gray-200">{fmtMan(krwInvested)}</p>
+                <p className="text-sm font-bold mono text-gray-200"><MoneyTip value={krwInvested} currency="KRW" /></p>
               </div>
             </div>
             <div className={`rounded-lg px-2.5 py-1.5 border ${krwCls.bg}`}>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-gray-500">현금 잔여</span>
-                <span className={`text-xs font-bold mono ${krwCls.text}`}>{fmtMan(krwCash)}</span>
+                <span className={`text-xs font-bold mono ${krwCls.text}`}><MoneyTip value={krwCash} currency="KRW" /></span>
               </div>
               <div className="flex items-center justify-between mt-0.5">
                 <span className="text-[10px] text-gray-600">현금 비중</span>
@@ -216,17 +203,17 @@ function AnalyticsSeedCard({ seed, krwRate, krwInvested, usdInvested, krwCash, u
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <p className="text-[10px] text-gray-600 mb-0.5">시드</p>
-                <p className="text-sm font-bold mono text-emerald-300">{fmtMoney(seed.usd, 'USD')}</p>
+                <p className="text-sm font-bold mono text-emerald-300"><MoneyTip value={seed.usd} currency="USD" /></p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-600 mb-0.5">투자금</p>
-                <p className="text-sm font-bold mono text-gray-200">{fmtMoney(usdInvested, 'USD')}</p>
+                <p className="text-sm font-bold mono text-gray-200"><MoneyTip value={usdInvested} currency="USD" /></p>
               </div>
             </div>
             <div className={`rounded-lg px-2.5 py-1.5 border ${usdCls.bg}`}>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-gray-500">현금 잔여</span>
-                <span className={`text-xs font-bold mono ${usdCls.text}`}>{fmtMoney(usdCash, 'USD')}</span>
+                <span className={`text-xs font-bold mono ${usdCls.text}`}><MoneyTip value={usdCash} currency="USD" /></span>
               </div>
               <div className="flex items-center justify-between mt-0.5">
                 <span className="text-[10px] text-gray-600">현금 비중</span>
@@ -585,7 +572,7 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
             </p>
             {tooltip.item.price != null && (
               <p style={{ fontFamily: 'monospace', marginBottom: '6px' }}>
-                {fmtMoney(tooltip.item.price, tooltip.item.currency)}
+                <MoneyTip value={tooltip.item.price} currency={tooltip.item.currency} />
               </p>
             )}
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.09)', paddingTop: '6px' }}>
@@ -692,7 +679,7 @@ function StackedBarAllocation({
               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
               <span className="text-gray-300">{label}</span>
               <span className="text-gray-500 mono">{pct.toFixed(1)}%</span>
-              <span className="text-gray-700 mono">{fmtMan(krw)}</span>
+              <span className="text-gray-700 mono"><MoneyTip value={krw} currency="KRW" /></span>
             </button>
           )
         })}
@@ -873,7 +860,7 @@ function FilteredAssetTable({
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-sm font-semibold mono text-gray-200">
-                    {tItem ? fmtMan(tItem.krwValue) : '—'}
+                    {tItem ? <MoneyTip value={tItem.krwValue} currency="KRW" /> : '—'}
                   </p>
                   {tItem?.plPct != null ? (
                     <p className={`text-[10px] mono ${tItem.plPct >= 0 ? 'text-rise' : 'text-fall'}`}>
@@ -1316,10 +1303,10 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
 
       {/* 요약 통계 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="총 보유금액" value={fmtMan(totalKrw)} sub="KRW 환산" />
+        <StatCard label="총 보유금액" value={<MoneyTip value={totalKrw} currency="KRW" />} sub="KRW 환산" />
         <StatCard
           label="실현손익"
-          value={hasSells ? (totalPL >= 0 ? '+' : '') + fmtMoney(Math.abs(totalPL), 'KRW') : '—'}
+          value={hasSells ? <><span>{totalPL >= 0 ? '+' : ''}</span><MoneyTip value={Math.abs(totalPL)} currency="KRW" /></> : '—'}
           sub={hasSells && totalInv > 0 ? fmtPct((totalPL / totalInv) * 100) : undefined}
           rising={hasSells ? totalPL >= 0 : null}
         />
@@ -1445,11 +1432,11 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
                       <span className="text-sm text-gray-200 font-medium truncate">{item.name}</span>
                       <span className="text-[10px] text-gray-600 mono">{item.ticker}</span>
                     </div>
-                    <p className="text-xs text-gray-500 mono">{fmtMoney(item.price, item.currency)}</p>
+                    <p className="text-xs text-gray-500 mono"><MoneyTip value={item.price} currency={item.currency} /></p>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className={`text-sm font-semibold mono ${item.pl >= 0 ? 'text-rise' : 'text-fall'}`}>
-                      {item.pl >= 0 ? '+' : ''}{fmtMoney(Math.abs(item.pl), item.currency)}
+                      {item.pl >= 0 ? '+' : ''}<MoneyTip value={Math.abs(item.pl)} currency={item.currency} />
                     </p>
                     <div className={`flex items-center justify-end gap-0.5 text-[10px] mono ${item.plPct >= 0 ? 'text-rise' : 'text-fall'}`}>
                       {item.plPct >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -1467,7 +1454,7 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
                   <div className="flex items-center justify-between pt-3 border-t border-gray-800">
                     <span className="text-xs font-semibold text-gray-400">평가손익 합계 (KRW 환산)</span>
                     <p className={`text-base font-bold mono ${totalLivePL >= 0 ? 'text-rise' : 'text-fall'}`}>
-                      {totalLivePL >= 0 ? '+' : ''}{fmtMoney(Math.abs(totalLivePL), 'KRW')}
+                      {totalLivePL >= 0 ? '+' : ''}<MoneyTip value={Math.abs(totalLivePL)} currency="KRW" />
                     </p>
                   </div>
                 )
@@ -1506,7 +1493,7 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className={`text-sm font-semibold mono ${item.pl >= 0 ? 'text-rise' : 'text-fall'}`}>
-                    {item.pl >= 0 ? '+' : ''}{fmtMoney(Math.abs(item.pl), item.currency)}
+                    {item.pl >= 0 ? '+' : ''}<MoneyTip value={Math.abs(item.pl)} currency={item.currency} />
                   </p>
                   <p className={`text-[10px] mono ${item.pl >= 0 ? 'text-rise' : 'text-fall'}`}>
                     {fmtPct(item.plPct)}
@@ -1519,7 +1506,7 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
             <span className="text-xs font-semibold text-gray-400">합계</span>
             <div className="text-right">
               <p className={`text-base font-bold mono ${totalPL >= 0 ? 'text-rise' : 'text-fall'}`}>
-                {totalPL >= 0 ? '+' : ''}{fmtMoney(Math.abs(totalPL), 'KRW')}
+                {totalPL >= 0 ? '+' : ''}<MoneyTip value={Math.abs(totalPL)} currency="KRW" />
               </p>
               {totalInv > 0 && (
                 <p className={`text-[10px] mono ${totalPL >= 0 ? 'text-rise' : 'text-fall'}`}>

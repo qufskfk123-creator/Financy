@@ -4,6 +4,7 @@
  */
 
 import { useState, useMemo } from 'react'
+import { MoneyTip } from '../components/MoneyTip'
 import {
   ArrowLeftRight,
   TrendingUp,
@@ -23,12 +24,6 @@ const MARKET_LABEL: Record<string, { label: string; emoji: string; cls: string }
 }
 
 // ── Formatters ─────────────────────────────────────────────
-
-function fmtMoney(v: number, currency: 'KRW' | 'USD'): string {
-  return currency === 'KRW'
-    ? `₩${v.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}`
-    : `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
 
 function fmtDate(iso: string): { date: string; time: string } {
   const d = new Date(iso)
@@ -90,7 +85,7 @@ function TxCard({ tx }: { tx: Transaction }) {
           <MarketBadge market={tx.market} />
         </div>
         <p className="text-xs text-gray-500 mono">
-          {fmtQty(tx.quantity, tx.market)} × {fmtMoney(tx.price, tx.currency)}
+          {fmtQty(tx.quantity, tx.market)} × <MoneyTip value={tx.price} currency={tx.currency} />
           <span className="text-gray-700 mx-1.5">·</span>
           {time}
         </p>
@@ -99,7 +94,7 @@ function TxCard({ tx }: { tx: Transaction }) {
       {/* Amount */}
       <div className="text-right flex-shrink-0">
         <p className={`text-sm font-bold mono tabular-nums ${isBuy ? 'text-gray-200' : 'text-rose-400'}`}>
-          {isBuy ? '' : '-'}{fmtMoney(tx.amount, tx.currency)}
+          {isBuy ? '' : '-'}<MoneyTip value={tx.amount} currency={tx.currency} />
         </p>
         <p className="text-[10px] text-gray-600">{isBuy ? '매수금액' : '매도금액'}</p>
       </div>
@@ -128,13 +123,13 @@ function SummaryBar({ txs }: { txs: Transaction[] }) {
       <div className="card !p-4 text-center">
         <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">매수 {buyCnt}건</p>
         <p className="text-sm font-bold text-brand-400 mono tabular-nums">
-          ₩{Math.round(buyTotal / 10_000).toLocaleString()}만
+          <MoneyTip value={buyTotal} currency="KRW" />
         </p>
       </div>
       <div className="card !p-4 text-center">
         <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">매도 {sellCnt}건</p>
         <p className="text-sm font-bold text-rose-400 mono tabular-nums">
-          ₩{Math.round(sellTotal / 10_000).toLocaleString()}만
+          <MoneyTip value={sellTotal} currency="KRW" />
         </p>
       </div>
     </div>

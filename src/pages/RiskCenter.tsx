@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { MoneyTip } from '../components/MoneyTip'
 import {
   ShieldAlert, TrendingDown, TrendingUp, AlertTriangle,
   DollarSign, Activity, RefreshCw, Droplets, Flame, Zap,
@@ -60,13 +61,17 @@ const MKTCFG: Record<MarketType, {
 function fmtW(v: number): string {
   const abs  = Math.abs(v)
   const sign = v < 0 ? '-' : ''
-  if (abs >= 100_000_000) return `${sign}₩${(abs / 100_000_000).toFixed(2)}억`
-  if (abs >= 10_000_000)  return `${sign}₩${(abs / 10_000_000).toFixed(1)}천만`
-  if (abs >= 1_000_000)   return `${sign}₩${(abs / 1_000_000).toFixed(0)}백만`
+  if (abs >= 1_000_000_000) return `${sign}₩${(abs / 1_000_000_000).toFixed(1)}B`
+  if (abs >= 1_000_000)     return `${sign}₩${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000)         return `${sign}₩${(abs / 1_000).toFixed(0)}K`
   return `${sign}₩${abs.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}`
 }
 function fmtD(v: number): string {
-  return `$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000_000) return `$${(abs / 1_000_000_000).toFixed(1)}B`
+  if (abs >= 1_000_000)     return `$${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000)         return `$${(abs / 1_000).toFixed(1)}K`
+  return `$${abs.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 function Skel({ w = 'w-full', h = 'h-3.5' }: { w?: string; h?: string }) {
   return <div className={`rounded bg-gray-800 animate-pulse ${w} ${h}`} />
@@ -419,7 +424,7 @@ function AllocationBar({ assets, seed, fxRate, krwInvested, usdInvested, krwCash
         <div className="space-y-2">
           <div className="flex items-center justify-between text-[11px]">
             <span className="flex items-center gap-1 font-semibold text-blue-400">🇰🇷 원화</span>
-            <span className="text-gray-500 mono">투자 {fmtW(krwInvested)} {krwCash > 0 && `/ 잔여 ${fmtW(krwCash)}`}</span>
+            <span className="text-gray-500 mono">투자 <MoneyTip value={krwInvested} currency="KRW" />{krwCash > 0 && <> / 잔여 <MoneyTip value={krwCash} currency="KRW" /></>}</span>
           </div>
           <div className="flex items-center gap-4">
             <SvgDonut
@@ -454,7 +459,7 @@ function AllocationBar({ assets, seed, fxRate, krwInvested, usdInvested, krwCash
         <div className="space-y-2">
           <div className="flex items-center justify-between text-[11px]">
             <span className="flex items-center gap-1 font-semibold text-emerald-400">🇺🇸 달러</span>
-            <span className="text-gray-500 mono">투자 {fmtD(usdInvested)} {usdCash > 0 && `/ 잔여 ${fmtD(usdCash)}`}</span>
+            <span className="text-gray-500 mono">투자 <MoneyTip value={usdInvested} currency="USD" />{usdCash > 0 && <> / 잔여 <MoneyTip value={usdCash} currency="USD" /></>}</span>
           </div>
           <div className="flex items-center gap-4">
             <SvgDonut
@@ -533,7 +538,7 @@ function ConcentrationAnalysis({ assets, fxRate, seedKRW }: {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                   <span className={`mono font-bold ${rc.text}`}>{a.pct.toFixed(1)}%</span>
-                  <span className="text-gray-600 mono text-[10px]">{fmtW(a.krw)}</span>
+                  <span className="text-gray-600 mono text-[10px]"><MoneyTip value={a.krw} currency="KRW" /></span>
                 </div>
               </div>
               <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -581,7 +586,7 @@ function FxRiskAccordion({ fxRate, totalUsdExp, seedKRW }: {
           <ArrowLeftRight className="w-4 h-4 text-sky-400" />
           <span className="text-sm font-semibold text-gray-200">외환 리스크 분석</span>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400">
-            달러 노출 {fmtD(totalUsdExp)}
+            달러 노출 <MoneyTip value={totalUsdExp} currency="USD" />
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -603,15 +608,15 @@ function FxRiskAccordion({ fxRate, totalUsdExp, seedKRW }: {
             </div>
             <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/25 px-4 py-3">
               <p className="text-[10px] text-gray-500 mb-1">달러 총 노출액</p>
-              <p className="text-base font-bold mono text-emerald-300">{fmtD(totalUsdExp)}</p>
-              <p className="text-[10px] text-gray-600 mono">{fmtW(totalUsdKRW)}</p>
+              <p className="text-base font-bold mono text-emerald-300"><MoneyTip value={totalUsdExp} currency="USD" /></p>
+              <p className="text-[10px] text-gray-600 mono"><MoneyTip value={totalUsdKRW} currency="KRW" /></p>
             </div>
           </div>
 
           {/* 환율 시나리오 테이블 */}
           <div className="space-y-1.5">
             <p className="text-[11px] text-gray-500">
-              환율 변동 시 원화 환산 변화 {seedKRW > 0 && <span className="text-gray-700">· 시드 {fmtW(seedKRW)} 대비</span>}
+              환율 변동 시 원화 환산 변화 {seedKRW > 0 && <span className="text-gray-700">· 시드 <MoneyTip value={seedKRW} currency="KRW" /> 대비</span>}
             </p>
             {FX_SCENARIOS.map(({ pct }) => {
               const newRate    = fxRate * (1 + pct / 100)
@@ -633,7 +638,7 @@ function FxRiskAccordion({ fxRate, totalUsdExp, seedKRW }: {
                       style={{ width: `${Math.min(100, pctOfSeed * 4)}%` }} />
                   </div>
                   <span className={`text-xs font-bold mono flex-shrink-0 w-24 text-right ${isGain ? 'text-emerald-400' : 'text-rose-400'} ${isCore ? '' : 'opacity-60'}`}>
-                    {isGain ? '+' : '-'}{fmtW(Math.abs(changeKRW))}
+                    {isGain ? '+' : '-'}<MoneyTip value={Math.abs(changeKRW)} currency="KRW" />
                   </span>
                   {seedKRW > 0 && (
                     <span className={`text-[10px] mono w-12 text-right flex-shrink-0 ${isCore ? 'text-gray-500' : 'text-gray-700'}`}>
@@ -732,11 +737,11 @@ function MddSection({ assets, krwRate, open, onToggle }: {
               <div className="flex justify-between text-[10px]">
                 <div>
                   <p className="text-gray-600 mb-0.5">예상 손실</p>
-                  <p className={`font-bold mono ${s.color}`}>-{fmtW(lossKRW)}</p>
+                  <p className={`font-bold mono ${s.color}`}>-<MoneyTip value={lossKRW} currency="KRW" /></p>
                 </div>
                 <div className="text-right">
                   <p className="text-gray-600 mb-0.5">잔여 자산</p>
-                  <p className="text-gray-300 mono font-semibold">{fmtW(afterKRW)}</p>
+                  <p className="text-gray-300 mono font-semibold"><MoneyTip value={afterKRW} currency="KRW" /></p>
                 </div>
               </div>
             </div>
@@ -764,7 +769,7 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
       <div className="flex items-center gap-2">
         <Zap className="w-4 h-4 text-brand-400" />
         <span className="text-sm font-semibold text-gray-200">시드머니 현황</span>
-        {hasSeed && <span className="ml-auto text-[10px] text-gray-600">통합 {fmtW(seedKRW)}</span>}
+        {hasSeed && <span className="ml-auto text-[10px] text-gray-600">통합 <MoneyTip value={seedKRW} currency="KRW" /></span>}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -778,11 +783,11 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <p className="text-[10px] text-gray-600 mb-0.5">시드</p>
-                  <p className="text-sm font-bold mono text-blue-300">{fmtW(seed.krw)}</p>
+                  <p className="text-sm font-bold mono text-blue-300"><MoneyTip value={seed.krw} currency="KRW" /></p>
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-600 mb-0.5">투자금</p>
-                  <p className="text-sm font-bold mono text-gray-200">{fmtW(krwInvested)}</p>
+                  <p className="text-sm font-bold mono text-gray-200"><MoneyTip value={krwInvested} currency="KRW" /></p>
                 </div>
               </div>
               {(() => {
@@ -791,7 +796,7 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
                   <div className={`rounded-lg px-2.5 py-1.5 border ${rc.bg} ${rc.border}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-gray-500">현금 잔여</span>
-                      <span className={`text-xs font-bold mono ${rc.text}`}>{fmtW(krwCash)}</span>
+                      <span className={`text-xs font-bold mono ${rc.text}`}><MoneyTip value={krwCash} currency="KRW" /></span>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
                       <span className="text-[10px] text-gray-600">현금 비중</span>
@@ -816,11 +821,11 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <p className="text-[10px] text-gray-600 mb-0.5">시드</p>
-                  <p className="text-sm font-bold mono text-emerald-300">{fmtD(seed.usd)}</p>
+                  <p className="text-sm font-bold mono text-emerald-300"><MoneyTip value={seed.usd} currency="USD" /></p>
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-600 mb-0.5">투자금</p>
-                  <p className="text-sm font-bold mono text-gray-200">{fmtD(usdInvested)}</p>
+                  <p className="text-sm font-bold mono text-gray-200"><MoneyTip value={usdInvested} currency="USD" /></p>
                 </div>
               </div>
               {(() => {
@@ -829,7 +834,7 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
                   <div className={`rounded-lg px-2.5 py-1.5 border ${rc.bg} ${rc.border}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-gray-500">현금 잔여</span>
-                      <span className={`text-xs font-bold mono ${rc.text}`}>{fmtD(usdCash)}</span>
+                      <span className={`text-xs font-bold mono ${rc.text}`}><MoneyTip value={usdCash} currency="USD" /></span>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
                       <span className="text-[10px] text-gray-600">현금 비중</span>
