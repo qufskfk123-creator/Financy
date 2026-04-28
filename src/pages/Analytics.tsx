@@ -1076,9 +1076,10 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
   // ── 자산 로드 + 환율 조회 ─────────────────────────────────
   useEffect(() => {
     setLoading(true)
-    const loadAssetsAsync = userId
-      ? fetchAssets(userId).then(d => d.length ? d : loadLocalAssets()).catch(() => loadLocalAssets())
-      : Promise.resolve(loadLocalAssets())
+    const local = loadLocalAssets()
+    const loadAssetsAsync = (userId && local.length === 0)
+      ? fetchAssets(userId).catch(() => [] as Asset[])
+      : Promise.resolve(local)
 
     loadAssetsAsync.then(data => { setAssets(data); setLoading(false) })
 

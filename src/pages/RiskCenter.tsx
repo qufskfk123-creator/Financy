@@ -34,12 +34,24 @@ function loadLocalAssets(): Asset[] {
   try {
     const raw = localStorage.getItem('financy_assets')
     if (!raw) return []
-    return (JSON.parse(raw) as any[]).map((a: any): Asset => ({
-      id: a.id, name: a.name, market: a.market ?? 'K-Stock',
-      createdAt: a.createdAt ?? new Date().toISOString(),
-      entries: Array.isArray(a.entries) ? a.entries : [],
-      sells:   Array.isArray(a.sells)   ? a.sells   : [],
-    }))
+    return (JSON.parse(raw) as any[]).map((a: any): Asset => {
+      if (!Array.isArray(a.entries)) {
+        return {
+          id: a.id ?? String(Date.now()),
+          name: a.name ?? '(이름 없음)',
+          market: a.market ?? 'K-Stock',
+          createdAt: a.createdAt ?? new Date().toISOString(),
+          entries: [{ id: a.id ?? String(Date.now()), quantity: Number(a.quantity ?? 0), price: Number(a.avgBuyPrice ?? 0), date: a.createdAt ?? new Date().toISOString() }],
+          sells: [],
+        }
+      }
+      return {
+        id: a.id, name: a.name, market: a.market ?? 'K-Stock',
+        createdAt: a.createdAt ?? new Date().toISOString(),
+        entries: a.entries,
+        sells: Array.isArray(a.sells) ? a.sells : [],
+      }
+    })
   } catch { return [] }
 }
 
@@ -959,9 +971,10 @@ export default function RiskCenter({ seed, userId }: { seed: SeedData; userId: s
       if (krw?.rate) setFxRate(krw.rate)
     }).catch(() => {})
 
-    const loadAssets = userId
-      ? fetchAssets(userId).then(data => setAssets(data.length > 0 ? data : loadLocalAssets())).catch(() => setAssets(loadLocalAssets()))
-      : Promise.resolve(setAssets(loadLocalAssets()))
+    const local = loadLocalAssets()
+    const loadAssets = (userId && local.length === 0)
+      ? fetchAssets(userId).then(data => setAssets(data)).catch(() => setAssets([]))
+      : Promise.resolve(setAssets(local))
 
     Promise.all([loadFx, loadAssets]).finally(() => { setLoading(false); setTimeout(() => setSpinning(false), 600) })
   }, [userId])
