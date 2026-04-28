@@ -613,9 +613,9 @@ const WEATHER_STAGES: WeatherStage[] = [
     desc: '유동성이 바닥났습니다. 시장에서 자금이 급격히 이탈하며 거래량이 극도로 위축된 상태입니다.',
     action: '극단적 역발상 — 신중한 분할 진입 탐색',
     glowColor: '#60a5fa',
-    activeBg: 'linear-gradient(135deg, rgba(30,58,138,0.90), rgba(23,37,84,0.95))',
+    activeBg: 'var(--weather-0-activebg)',
     borderGlow: 'rgba(96,165,250,0.50)',
-    iconColor: '#93c5fd', iconAnim: 'weather-rain-drop 1.1s ease-in-out infinite',
+    iconColor: 'var(--weather-0-iconcolor)', iconAnim: 'weather-rain-drop 1.1s ease-in-out infinite',
   },
   {
     from: 21, to: 41,
@@ -624,9 +624,9 @@ const WEATHER_STAGES: WeatherStage[] = [
     desc: '유동성이 정체 상태입니다. 매수·매도 모두 위축되고 시장이 방향을 잃은 상태입니다.',
     action: '우량 자산 분할 매수 검토 시점',
     glowColor: '#a78bfa',
-    activeBg: 'linear-gradient(135deg, rgba(76,29,149,0.88), rgba(49,46,129,0.93))',
+    activeBg: 'var(--weather-1-activebg)',
     borderGlow: 'rgba(167,139,250,0.50)',
-    iconColor: '#c4b5fd', iconAnim: 'weather-cloud-bob 2.4s ease-in-out infinite',
+    iconColor: 'var(--weather-1-iconcolor)', iconAnim: 'weather-cloud-bob 2.4s ease-in-out infinite',
   },
   {
     from: 41, to: 61,
@@ -635,9 +635,9 @@ const WEATHER_STAGES: WeatherStage[] = [
     desc: '유동성이 안정적으로 흐르고 있습니다. 시장이 균형 잡힌 상태입니다.',
     action: '추세 추종 전략 유효',
     glowColor: '#fbbf24',
-    activeBg: 'linear-gradient(135deg, rgba(72,56,0,0.92), rgba(100,78,0,0.96))',
+    activeBg: 'var(--weather-2-activebg)',
     borderGlow: 'rgba(251,191,36,0.55)',
-    iconColor: '#fde68a', iconAnim: 'weather-sun-spin 8s linear infinite',
+    iconColor: 'var(--weather-2-iconcolor)', iconAnim: 'weather-sun-spin 8s linear infinite',
   },
   {
     from: 61, to: 81,
@@ -646,9 +646,9 @@ const WEATHER_STAGES: WeatherStage[] = [
     desc: '유동성이 빠르게 유입되고 있습니다. 강한 추세와 모멘텀이 형성되고 있습니다.',
     action: '추세 종목 비중 확대 검토',
     glowColor: '#34d399',
-    activeBg: 'linear-gradient(135deg, rgba(6,78,59,0.88), rgba(4,120,87,0.93))',
+    activeBg: 'var(--weather-3-activebg)',
     borderGlow: 'rgba(52,211,153,0.50)',
-    iconColor: '#6ee7b7', iconAnim: 'weather-wind-blow 1.8s ease-in-out infinite',
+    iconColor: 'var(--weather-3-iconcolor)', iconAnim: 'weather-wind-blow 1.8s ease-in-out infinite',
   },
   {
     from: 81, to: 101,
@@ -657,9 +657,9 @@ const WEATHER_STAGES: WeatherStage[] = [
     desc: '유동성 과잉 상태입니다. 시장이 과열되어 급격한 되돌림 리스크가 높아지고 있습니다.',
     action: '익절·리스크 관리 최우선',
     glowColor: '#f87171',
-    activeBg: 'linear-gradient(135deg, rgba(127,29,29,0.90), rgba(153,27,27,0.95))',
+    activeBg: 'var(--weather-4-activebg)',
     borderGlow: 'rgba(248,113,113,0.50)',
-    iconColor: '#fca5a5', iconAnim: 'weather-flood-pulse 1.5s ease-in-out infinite',
+    iconColor: 'var(--weather-4-iconcolor)', iconAnim: 'weather-flood-pulse 1.5s ease-in-out infinite',
   },
 ]
 
@@ -813,7 +813,7 @@ function MarketTempCard({ data, loading }: { data: MarketStatusData | null; load
                 {isActive && (
                   <span
                     className="relative z-10 font-mono text-[10px] font-semibold leading-none"
-                    style={{ color: s.iconColor + 'cc' }}
+                    style={{ color: s.glowColor + 'cc' }}
                   >{previewIdx !== null ? `${s.from}–${s.to - 1}` : `${score}pt`}</span>
                 )}
               </button>

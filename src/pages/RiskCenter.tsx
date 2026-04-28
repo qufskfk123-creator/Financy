@@ -295,10 +295,10 @@ function DefenseScoreDashboard({ scores, hasSeed }: { scores: DefenseScores; has
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-1 text-center text-[11px] text-gray-600 border-t border-gray-800/60 pt-2">
-        <span>현금+우량주 / 시드</span>
-        <span>포트폴리오 β → 점수</span>
-        <span>상위3 비중 기반</span>
+      <div className="grid grid-cols-3 gap-1 text-center text-[10px] text-gray-600 border-t border-gray-800/60 pt-2">
+        <span className="leading-tight">현금+우량주<br className="sm:hidden" />/시드</span>
+        <span className="leading-tight">포트폴리오<br className="sm:hidden" />β→점수</span>
+        <span className="leading-tight">상위3<br className="sm:hidden" />비중기반</span>
       </div>
     </div>
   )
@@ -637,23 +637,23 @@ function FxRiskAccordion({ fxRate, totalUsdExp, seedKRW }: {
               const pctOfSeed  = seedKRW > 0 ? (Math.abs(changeKRW) / seedKRW) * 100 : 0
               const isCore     = Math.abs(pct) <= 5
               return (
-                <div key={pct} className={`flex items-center gap-3 px-3 py-2 rounded-xl border transition-all ${
+                <div key={pct} className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
                   isGain
                     ? isCore ? 'bg-emerald-500/12 border-emerald-500/30' : 'bg-emerald-500/5 border-emerald-500/12'
                     : isCore ? 'bg-rose-500/12    border-rose-500/30'    : 'bg-rose-500/5    border-rose-500/12'
                 }`}>
-                  <span className={`text-xs font-bold w-20 flex-shrink-0 mono ${isGain ? 'text-emerald-400' : 'text-rose-400'} ${isCore ? '' : 'opacity-60'}`}>
+                  <span className={`text-xs font-bold w-[52px] flex-shrink-0 mono ${isGain ? 'text-emerald-400' : 'text-rose-400'} ${isCore ? '' : 'opacity-60'}`}>
                     {pct > 0 ? '+' : ''}{pct}%
                   </span>
                   <div className="flex-1 h-1 rounded-full bg-black/20 overflow-hidden">
                     <div className={`h-full rounded-full transition-all duration-500 ${isGain ? 'bg-emerald-500' : 'bg-rose-500'}`}
                       style={{ width: `${Math.min(100, pctOfSeed * 4)}%` }} />
                   </div>
-                  <span className={`text-xs font-bold mono flex-shrink-0 w-24 text-right ${isGain ? 'text-emerald-400' : 'text-rose-400'} ${isCore ? '' : 'opacity-60'}`}>
+                  <span className={`text-xs font-bold mono flex-shrink-0 w-20 text-right ${isGain ? 'text-emerald-400' : 'text-rose-400'} ${isCore ? '' : 'opacity-60'}`}>
                     {isGain ? '+' : '-'}<MoneyTip value={Math.abs(changeKRW)} currency="KRW" />
                   </span>
                   {seedKRW > 0 && (
-                    <span className={`text-[10px] mono w-12 text-right flex-shrink-0 ${isCore ? 'text-gray-500' : 'text-gray-700'}`}>
+                    <span className={`hidden sm:inline text-[10px] mono w-12 text-right flex-shrink-0 ${isCore ? 'text-gray-500' : 'text-gray-700'}`}>
                       {isGain ? '+' : '-'}{pctOfSeed.toFixed(1)}%
                     </span>
                   )}
@@ -784,7 +784,7 @@ function SeedSummaryCard({ seed, fxRate, krwInvested, usdInvested, krwCash, usdC
         {hasSeed && <span className="ml-auto text-[10px] text-gray-600">통합 <MoneyTip value={seedKRW} currency="KRW" /></span>}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
           <div className="flex items-center gap-1.5">
             <span className="text-sm">🇰🇷</span>

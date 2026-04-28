@@ -167,7 +167,7 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50
                       bg-gray-900/95 backdrop-blur-md border-t border-gray-800
                       safe-area-inset-bottom">
-        <div className="flex items-center justify-around px-2 pt-2 pb-2.5">
+        <div className="flex items-center px-1 pt-2 pb-2.5">
           {bottomNavItems.map(({ id, label, icon: Icon }) => {
             const active = currentPage === id
             const isDashboard = id === 'dashboard'
@@ -175,7 +175,7 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
               <button
                 key={id}
                 onClick={() => onNavigate(id)}
-                className={`flex flex-col items-center gap-1.5 px-4 py-1.5 rounded-xl transition-colors duration-150 min-w-[60px] ${
+                className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl transition-colors duration-150 ${
                   active ? 'text-brand-400' : 'text-gray-500 active:text-gray-300'
                 }`}
               >
@@ -189,7 +189,7 @@ export default function Sidebar({ currentPage, onNavigate, userName, userEmail, 
                 ) : (
                   <Icon className={`w-6 h-6 ${active ? 'scale-110' : ''} transition-transform duration-150`} />
                 )}
-                <span className="text-xs font-semibold">{label}</span>
+                <span className="text-[10px] font-semibold whitespace-nowrap leading-none">{label}</span>
               </button>
             )
           })}

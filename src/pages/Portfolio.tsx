@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { MoneyTip } from '../components/MoneyTip'
 import type { Transaction } from '../lib/transactions'
 import type { SeedData } from '../lib/seed'
@@ -32,7 +33,6 @@ import {
   ArrowDownLeft,
   Search,
   Loader2,
-  Pencil,
   Check,
 } from 'lucide-react'
 
@@ -233,7 +233,11 @@ function fmtQty(value: number, market: MarketType): string {
 
 function fmtDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' })
+    const d = new Date(iso)
+    const yy = String(d.getFullYear()).slice(2)
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yy}.${mm}.${dd}`
   } catch { return '' }
 }
 
@@ -594,7 +598,7 @@ function AddAssetForm({ onAdd, onClose }: {
         <form onSubmit={submit} className="p-5 space-y-4">
           <div>
             <p className="text-xs text-gray-500 mb-2">시장 선택</p>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {MARKET_TYPES.map(m => {
                 const c = MARKET_CONFIG[m]
                 return (
@@ -920,6 +924,154 @@ function SellForm({ asset, onConfirm, onCancel }: {
   )
 }
 
+// ── EditEntryModal ─────────────────────────────────────────
+
+function EditEntryModal({ entry, asset, entryIndex, onSave, onDelete, onClose }: {
+  entry:      BuyEntry
+  asset:      Asset
+  entryIndex: number
+  onSave:     (qty: number, price: number, totalAmount?: number) => void
+  onDelete:   () => void
+  onClose:    () => void
+}) {
+  const [editQty,   setEditQty]   = useState(String(entry.quantity))
+  const [editPrice, setEditPrice] = useState(String(entry.price))
+  const [editTotal, setEditTotal] = useState(entry.totalAmount !== undefined ? String(entry.totalAmount) : '')
+
+  const cfg      = MARKET_CONFIG[asset.market]
+  const currency = cfg.currency
+  const q = parseFloat(editQty), p = parseFloat(editPrice)
+  const autoTotal = !isNaN(q) && !isNaN(p) && q > 0 && p > 0 ? round2(q * p) : null
+  const tNum = parseFloat(editTotal)
+  const hasOverride = editTotal !== '' && !isNaN(tNum)
+
+  const handleSave = () => {
+    if (isNaN(q) || q <= 0 || isNaN(p) || p <= 0) return
+    onSave(q, p, hasOverride ? tNum : undefined)
+  }
+
+  const handleKeyDown = (ev: React.KeyboardEvent) => {
+    if (ev.key === 'Enter') handleSave()
+    if (ev.key === 'Escape') onClose()
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div className="w-full max-w-sm bg-gray-900 border border-gray-700/80 rounded-t-2xl sm:rounded-2xl shadow-2xl">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-800">
+          <div>
+            <p className="text-sm font-semibold text-white">{asset.name}</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              매수 #{entryIndex + 1} · {fmtDate(entry.date)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-400 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 입력 필드 */}
+        <div className="px-5 py-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] text-gray-500 mb-1.5">
+                수량{asset.market === 'Crypto' ? ' (개)' : asset.market === 'Cash' ? '' : ' (주)'}
+              </label>
+              <input
+                type="number" min="0" step="any"
+                value={editQty} onChange={e => setEditQty(e.target.value)}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 rounded-xl px-3 py-2.5 text-sm text-gray-100 outline-none transition-colors mono"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] text-gray-500 mb-1.5">단가 ({currency})</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none">
+                  {currency === 'KRW' ? '₩' : '$'}
+                </span>
+                <input
+                  type="number" min="0" step="any"
+                  value={editPrice} onChange={e => setEditPrice(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 rounded-xl pl-7 pr-3 py-2.5 text-sm text-gray-100 outline-none transition-colors mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 소계 오버라이드 */}
+          {autoTotal !== null && (
+            <div className="bg-gray-800/60 rounded-xl px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-gray-500">자동 소계</span>
+                <span className="text-sm font-bold mono text-gray-200">
+                  <MoneyTip value={hasOverride ? tNum : autoTotal} currency={currency} />
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-600 whitespace-nowrap flex-shrink-0">증권사 금액이 다를 경우</span>
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-gray-500 pointer-events-none">
+                    {currency === 'KRW' ? '₩' : '$'}
+                  </span>
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={editTotal} onChange={e => setEditTotal(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={String(autoTotal)}
+                    className="w-full bg-gray-700/50 border border-gray-600/60 focus:border-amber-500/50 rounded-lg pl-6 pr-6 py-1 text-xs text-gray-200 placeholder:text-gray-700 outline-none mono"
+                  />
+                  {editTotal !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setEditTotal('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm"
+                    >×</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 버튼 영역 */}
+        <div className="px-5 pb-5 space-y-2">
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              className="flex-1 btn-primary py-2.5 text-sm font-semibold flex items-center justify-center gap-1.5"
+            >
+              <Check className="w-4 h-4" />수정 완료
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 text-sm transition-colors"
+            >
+              취소
+            </button>
+          </div>
+          <button
+            onClick={onDelete}
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-rose-500/20 text-rose-400 hover:bg-rose-500/10 text-sm transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />이 매수 내역 삭제
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ── AssetCard ──────────────────────────────────────────────
 
 type InlineMode = 'none' | 'buy' | 'sell'
@@ -933,30 +1085,10 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
   onDeleteSell:   (assetId: string, sellId: string) => void
   onEditEntry:    (assetId: string, entryId: string, qty: number, price: number, totalAmount?: number) => void
 }) {
-  const [expanded, setExpanded]       = useState(false)
-  const [mode, setMode]               = useState<InlineMode>('none')
-  const [editEntryId, setEditEntryId] = useState<string | null>(null)
-  const [editQty, setEditQty]         = useState('')
-  const [editPrice, setEditPrice]     = useState('')
-  const [editTotal, setEditTotal]     = useState('')
-  const detailRef                     = useRef<HTMLDivElement>(null)
-
-  const startEdit = (e: BuyEntry) => {
-    setEditEntryId(e.id)
-    setEditQty(String(e.quantity))
-    setEditPrice(String(e.price))
-    setEditTotal(e.totalAmount !== undefined ? String(e.totalAmount) : '')
-  }
-  const cancelEdit = () => setEditEntryId(null)
-  const confirmEdit = () => {
-    if (!editEntryId) return
-    const q = parseFloat(editQty), p = parseFloat(editPrice)
-    if (isNaN(q) || q <= 0 || isNaN(p) || p <= 0) return
-    const tNum = parseFloat(editTotal)
-    const hasOverride = editTotal !== '' && !isNaN(tNum)
-    onEditEntry(asset.id, editEntryId, q, p, hasOverride ? tNum : undefined)
-    setEditEntryId(null)
-  }
+  const [expanded, setExpanded]     = useState(false)
+  const [mode, setMode]             = useState<InlineMode>('none')
+  const [editEntry, setEditEntry]   = useState<BuyEntry | null>(null)
+  const detailRef                   = useRef<HTMLDivElement>(null)
 
   const cfg      = MARKET_CONFIG[asset.market]
   const currency = cfg.currency
@@ -1073,88 +1205,35 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
           {/* ▸ 매수 이력 */}
           <div className="space-y-1">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">매수 이력</p>
-            <div className="grid grid-cols-[1.2fr_1fr_1fr_1.2fr_auto] gap-2 pb-1">
-              {['날짜', '수량', '단가', '소계', ''].map(h => (
-                <p key={h} className="text-[10px] text-gray-600 font-medium">{h}</p>
-              ))}
-            </div>
-            {asset.entries.map((e, idx) => (
-              editEntryId === e.id ? (
-                <div key={e.id} className="py-2 px-2 -mx-1 rounded-lg bg-brand-500/8 border border-brand-500/20 space-y-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-700 font-bold w-4 flex-shrink-0">{idx + 1}</span>
-                    <span className="text-[10px] text-gray-500">{fmtDate(e.date)}</span>
-                    <span className="text-[10px] text-brand-400 ml-auto">수정 중</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[9px] text-gray-600 mb-0.5">수량</p>
-                      <input type="number" min="0" step="any" value={editQty}
-                        onChange={ev => setEditQty(ev.target.value)}
-                        onKeyDown={ev => { if (ev.key === 'Enter') confirmEdit(); if (ev.key === 'Escape') cancelEdit() }}
-                        className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 rounded-lg px-2 py-1 text-xs text-gray-200 outline-none mono"
-                        autoFocus />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[9px] text-gray-600 mb-0.5">단가 ({currency})</p>
-                      <input type="number" min="0" step="any" value={editPrice}
-                        onChange={ev => setEditPrice(ev.target.value)}
-                        onKeyDown={ev => { if (ev.key === 'Enter') confirmEdit(); if (ev.key === 'Escape') cancelEdit() }}
-                        className="w-full bg-gray-800 border border-gray-700 focus:border-brand-500 rounded-lg px-2 py-1 text-xs text-gray-200 outline-none mono" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[9px] text-gray-600 mb-0.5">소계 ({currency})</p>
-                      <input type="number" min="0" step="any" value={editTotal}
-                        onChange={ev => setEditTotal(ev.target.value)}
-                        onKeyDown={ev => { if (ev.key === 'Enter') confirmEdit(); if (ev.key === 'Escape') cancelEdit() }}
-                        placeholder={
-                          !isNaN(parseFloat(editQty)) && !isNaN(parseFloat(editPrice))
-                            ? String(round2(parseFloat(editQty) * parseFloat(editPrice)))
-                            : '자동'
-                        }
-                        className="w-full bg-gray-800 border border-gray-700 focus:border-amber-500 rounded-lg px-2 py-1 text-xs text-amber-200 outline-none mono placeholder:text-gray-700" />
-                    </div>
-                    <div className="flex items-end gap-1 pb-0.5 flex-shrink-0">
-                      <button onClick={confirmEdit}
-                        className="w-6 h-6 rounded flex items-center justify-center bg-brand-600/20 text-brand-400 hover:bg-brand-600/40 transition-colors">
-                        <Check className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={cancelEdit}
-                        className="w-6 h-6 rounded flex items-center justify-center bg-gray-800 text-gray-500 hover:text-gray-300 transition-colors">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
+            <div className="overflow-x-auto -mx-1">
+              <div className="min-w-[260px] px-1">
+                <div className="grid grid-cols-[1.5fr_1fr_1fr_1.5fr] gap-x-2 gap-y-0 pb-1">
+                  {['날짜', '수량', '단가', '소계'].map(h => (
+                    <p key={h} className="text-[10px] text-gray-600 font-medium">{h}</p>
+                  ))}
                 </div>
-              ) : (
-                <div key={e.id} className="grid grid-cols-[1.2fr_1fr_1fr_1.2fr_auto] gap-2 items-center py-1.5 rounded-lg hover:bg-gray-800/50 px-1 -mx-1 group transition-colors">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-700 font-bold w-4 flex-shrink-0">{idx + 1}</span>
-                    <span className="text-xs text-gray-500">{fmtDate(e.date)}</span>
+                {asset.entries.map((e) => (
+                  <div
+                    key={e.id}
+                    className="grid grid-cols-[1.5fr_1fr_1fr_1.5fr] gap-x-2 gap-y-0 items-center py-1.5 rounded-lg hover:bg-gray-800/60 active:bg-gray-800 px-1 -mx-1 cursor-pointer transition-colors select-none"
+                    onClick={() => setEditEntry(e)}
+                    role="button"
+                    title="클릭하여 수정"
+                  >
+                    <span className="text-[10px] text-gray-500 mono whitespace-nowrap">{fmtDate(e.date)}</span>
+                    <span className="text-xs text-gray-300 mono">{fmtQty(e.quantity, asset.market)}</span>
+                    <span className="text-xs text-gray-400 mono"><MoneyTip value={e.price} currency={currency} /></span>
+                    <span className="text-xs text-gray-300 mono"><MoneyTip value={e.totalAmount ?? round2(e.quantity * e.price)} currency={currency} /></span>
                   </div>
-                  <span className="text-xs text-gray-300 mono">{fmtQty(e.quantity, asset.market)}</span>
-                  <span className="text-xs text-gray-400 mono"><MoneyTip value={e.price} currency={currency} /></span>
-                  <span className="text-xs text-gray-300 mono"><MoneyTip value={e.totalAmount ?? round2(e.quantity * e.price)} currency={currency} /></span>
-                  <div className="flex items-center gap-0.5">
-                    <button onClick={ev => { ev.stopPropagation(); startEdit(e) }}
-                      className="w-5 h-5 rounded flex items-center justify-center text-gray-700 hover:text-brand-400 hover:bg-brand-500/10 opacity-0 group-hover:opacity-100 transition-all">
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => handleDeleteEntry(e.id)}
-                      className="w-5 h-5 rounded flex items-center justify-center text-gray-700 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
+                ))}
+                {/* 매수 합계 */}
+                <div className="grid grid-cols-[1.5fr_1fr_1fr_1.5fr] gap-x-2 gap-y-0 items-center pt-2 mt-0.5 border-t border-gray-800">
+                  <span className="text-[10px] text-gray-500 font-semibold">합계</span>
+                  <span className="text-xs font-bold text-gray-200 mono">{fmtQty(totalBuyQty(asset), asset.market)}</span>
+                  <span className="text-xs font-bold text-gray-200 mono"><MoneyTip value={avg} currency={currency} /></span>
+                  <span className="text-xs font-bold text-gray-200 mono"><MoneyTip value={totalInvested(asset)} currency={currency} /></span>
                 </div>
-              )
-            ))}
-            {/* 매수 합계 */}
-            <div className="grid grid-cols-[1.2fr_1fr_1fr_1.2fr_auto] gap-2 items-center pt-2 mt-0.5 border-t border-gray-800">
-              <span className="text-[10px] text-gray-500 font-semibold">합계</span>
-              <span className="text-xs font-bold text-gray-200 mono">{fmtQty(totalBuyQty(asset), asset.market)}</span>
-              <span className="text-xs font-bold text-gray-200 mono"><MoneyTip value={avg} currency={currency} /></span>
-              <span className="text-xs font-bold text-gray-200 mono"><MoneyTip value={totalInvested(asset)} currency={currency} /></span>
-              <span />
+              </div>
             </div>
           </div>
 
@@ -1162,53 +1241,54 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
           {hasSells && (
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">매도 이력</p>
-              <div className="grid grid-cols-[1.2fr_1fr_1fr_1.4fr_auto] gap-2 pb-1">
-                {['날짜', '수량', '단가', '실현손익', ''].map(h => (
-                  <p key={h} className="text-[10px] text-gray-600 font-medium">{h}</p>
-                ))}
-              </div>
-              {asset.sells.map((s, idx) => {
-                const { pl, plPct } = sellEntryPL(s, avg)
-                const profit = pl >= 0
-                return (
-                  <div key={s.id} className="grid grid-cols-[1.2fr_1fr_1fr_1.4fr_auto] gap-2 items-center py-1.5 rounded-lg hover:bg-gray-800/50 px-1 -mx-1 group transition-colors">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-gray-700 font-bold w-4 flex-shrink-0">{idx + 1}</span>
-                      <span className="text-xs text-gray-500">{fmtDate(s.date)}</span>
-                    </div>
-                    <span className="text-xs text-gray-300 mono">{fmtQty(s.quantity, asset.market)}</span>
-                    <span className="text-xs text-gray-400 mono"><MoneyTip value={s.price} currency={currency} /></span>
-                    <div className="flex flex-col">
-                      <span className={`text-xs font-semibold mono ${profit ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {pl >= 0 ? '+' : ''}<MoneyTip value={Math.abs(pl)} currency={currency} />
-                      </span>
-                      <span className={`text-[10px] mono ${profit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {fmtPct(plPct)}
-                      </span>
-                    </div>
-                    <button onClick={() => handleDeleteSell(s.id)}
-                      className="w-5 h-5 rounded flex items-center justify-center text-gray-700 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all">
-                      <X className="w-3 h-3" />
-                    </button>
+              <div className="overflow-x-auto -mx-1">
+                <div className="min-w-[280px] px-1">
+                  <div className="grid grid-cols-[1.5fr_1fr_1fr_1.4fr_32px] gap-x-2 gap-y-0 pb-1">
+                    {['날짜', '수량', '단가', '실현손익', ''].map(h => (
+                      <p key={h} className="text-[10px] text-gray-600 font-medium">{h}</p>
+                    ))}
                   </div>
-                )
-              })}
-              {/* 매도 합계 */}
-              <div className="grid grid-cols-[1.2fr_1fr_1fr_1.4fr_auto] gap-2 items-center pt-2 mt-0.5 border-t border-gray-800">
-                <span className="text-[10px] text-gray-500 font-semibold">합계</span>
-                <span className="text-xs font-bold text-gray-200 mono">{fmtQty(totalSellQty(asset), asset.market)}</span>
-                <span />
-                <div className="flex flex-col">
-                  <span className={`text-xs font-bold mono ${realPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {realPL >= 0 ? '+' : ''}<MoneyTip value={Math.abs(realPL)} currency={currency} />
-                  </span>
-                  {totalInvested(asset) > 0 && (
-                    <span className={`text-[10px] mono ${realPL >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {fmtPct((realPL / totalInvested(asset)) * 100)}
-                    </span>
-                  )}
+                  {asset.sells.map((s, _idx) => {
+                    const { pl, plPct } = sellEntryPL(s, avg)
+                    const profit = pl >= 0
+                    return (
+                      <div key={s.id} className="grid grid-cols-[1.5fr_1fr_1fr_1.4fr_32px] gap-x-2 gap-y-0 items-center py-1.5 rounded-lg hover:bg-gray-800/50 px-1 -mx-1 group transition-colors">
+                        <span className="text-[10px] text-gray-500 mono whitespace-nowrap">{fmtDate(s.date)}</span>
+                        <span className="text-xs text-gray-300 mono">{fmtQty(s.quantity, asset.market)}</span>
+                        <span className="text-xs text-gray-400 mono"><MoneyTip value={s.price} currency={currency} /></span>
+                        <div className="flex flex-col">
+                          <span className={`text-xs font-semibold mono ${profit ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {pl >= 0 ? '+' : ''}<MoneyTip value={Math.abs(pl)} currency={currency} />
+                          </span>
+                          <span className={`text-[10px] mono ${profit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {fmtPct(plPct)}
+                          </span>
+                        </div>
+                        <button onClick={() => handleDeleteSell(s.id)}
+                          className="w-5 h-5 rounded flex items-center justify-center text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                  {/* 매도 합계 */}
+                  <div className="grid grid-cols-[1.5fr_1fr_1fr_1.4fr_32px] gap-x-2 gap-y-0 items-center pt-2 mt-0.5 border-t border-gray-800">
+                    <span className="text-[10px] text-gray-500 font-semibold">합계</span>
+                    <span className="text-xs font-bold text-gray-200 mono">{fmtQty(totalSellQty(asset), asset.market)}</span>
+                    <span />
+                    <div className="flex flex-col">
+                      <span className={`text-xs font-bold mono ${realPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {realPL >= 0 ? '+' : ''}<MoneyTip value={Math.abs(realPL)} currency={currency} />
+                      </span>
+                      {totalInvested(asset) > 0 && (
+                        <span className={`text-[10px] mono ${realPL >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {fmtPct((realPL / totalInvested(asset)) * 100)}
+                        </span>
+                      )}
+                    </div>
+                    <span />
+                  </div>
                 </div>
-                <span />
               </div>
             </div>
           )}
@@ -1265,6 +1345,24 @@ function AssetCard({ asset, onDeleteAsset, onAddEntry, onAddSell, onDeleteEntry,
             />
           )}
         </div>
+      )}
+
+      {/* 매수 이력 수정 모달 */}
+      {editEntry && (
+        <EditEntryModal
+          entry={editEntry}
+          asset={asset}
+          entryIndex={asset.entries.findIndex(e => e.id === editEntry.id)}
+          onSave={(q, p, t) => {
+            onEditEntry(asset.id, editEntry.id, q, p, t)
+            setEditEntry(null)
+          }}
+          onDelete={() => {
+            setEditEntry(null)
+            handleDeleteEntry(editEntry.id)
+          }}
+          onClose={() => setEditEntry(null)}
+        />
       )}
     </div>
   )

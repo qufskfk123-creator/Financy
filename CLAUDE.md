@@ -15,7 +15,7 @@
 ## 디렉토리 구조
 
 ```
-D:\AI study\Financy\
+D:\AI study\Financy_v1.0\
 ├── src/
 │   ├── App.tsx                  # 루트: 라우팅, 전역 상태, 인증
 │   ├── main.tsx
@@ -25,6 +25,7 @@ D:\AI study\Financy\
 │   │   ├── Portfolio.tsx        # 포트폴리오 관리 (CRUD, 손익)
 │   │   ├── RiskCenter.tsx       # 리스크 센터 (방어지표, FX 노출, 집중도)
 │   │   ├── Analytics.tsx        # 분석 (파이차트, 실시간평가손익, MDD, 섹터, 배당, 목표가)
+│   │   ├── Transactions.tsx     # 거래 내역 (매수/매도 자동 기록)
 │   │   ├── Settings.tsx         # 설정 (테마, 닉네임, 이모지, 채팅 설정)
 │   │   └── Auth.tsx             # 인증 페이지
 │   ├── components/
@@ -32,6 +33,7 @@ D:\AI study\Financy\
 │   │   ├── TickerTape.tsx       # 상단 실시간 시세 전광판 (CSS GPU 애니메이션)
 │   │   ├── FloatingChat.tsx     # 드래그 가능한 플로팅 채팅창 (framer-motion)
 │   │   ├── EmojiAvatar.tsx      # 이모지 아바타 컴포넌트 + 유틸
+│   │   ├── MoneyTip.tsx         # 금액 축약 표시 + 호버 툴팁 (K/M/B 포맷)
 │   │   ├── AuthModal.tsx        # 인증 모달 (레거시)
 │   │   ├── Toast.tsx            # 알림 토스트
 │   │   └── ErrorBoundary.tsx    # React 에러 경계
@@ -252,12 +254,78 @@ export function avatarFromUserId(userId: string): { emoji: string; color: string
 
 ---
 
+## MoneyTip — 금액 축약 & 호버 툴팁 시스템
+
+`src/components/MoneyTip.tsx` — 모든 금액 표시에 공통 사용.
+
+```typescript
+// 컴팩트 포맷 규칙
+// KRW: >= 1B → ₩1.2B / >= 1M → ₩12.3M / >= 1K → ₩123K / 미만 → 원본
+// USD: >= 1B → $1.2B / >= 1M → $1.2M  / >= 1K → $1.2K  / 미만 → $12.34
+
+export function MoneyTip({ value, currency, className }: {
+  value: number
+  currency: 'KRW' | 'USD'
+  className?: string
+})
+// - compact === full 이면 툴팁 없이 <span> 만 렌더
+// - compact !== full 이면 호버 시 full 금액 팝업 (group/moneytip + absolute tooltip)
+// - z-[9999], whitespace-nowrap, opacity transition 150ms
+```
+
+**각 페이지의 로컬 fmtMoney / fmtMan / fmtW / fmtD 함수도 동일한 K/M/B 로직으로 통일됨.**  
+JSX에서 금액을 직접 렌더하는 곳은 모두 `<MoneyTip>` 으로 교체.  
+template literal(`\`...\``) 안 문자열 컨텍스트에서는 로컬 fmtXxx 함수 그대로 사용.
+
+---
+
 ## 시드머니 시스템 (이중 통화)
 
 - **SeedData**: `{ krw: number, usd: number }` — localStorage(`financy_seed`)
 - Portfolio와 RiskCenter 모두 `seed` prop으로 주입받음
 - KRW 시드: 국내주식/현금 기준, USD 시드: 미국주식/코인 기준
 - 환율 적용 후 전체 KRW 환산 비교
+
+---
+
+## 자산 데이터 로딩 우선순위 (중요)
+
+**Portfolio · RiskCenter · Analytics 모두 독립적으로 자산을 로드한다.**  
+세 탭이 App.tsx를 통해 공유 상태를 받지 않음 — 각자 마운트 시 데이터 조회.
+
+```
+데이터 소스 우선순위 (RiskCenter, Analytics):
+  1. localStorage('financy_assets') — 항상 full 구조 (entries + sells 전체)
+  2. Supabase DB fetchAssets()     — localStorage 비어있을 때만 폴백
+                                     (DB는 quantity + avg_price 압축 저장으로 이력 손실)
+```
+
+> **주의**: DB의 `assets` 테이블은 `quantity`(보유수량) + `avg_price`(평균단가)만 저장한다.
+> `rowToAsset()`으로 복원하면 entries가 1개로 뭉개지고 sells가 빈 배열이 된다.
+> 따라서 localStorage가 있는 한 DB를 먼저 읽으면 안 된다.
+
+```typescript
+// RiskCenter.tsx loadData() — 올바른 패턴
+const local = loadLocalAssets()
+const loadAssets = (userId && local.length === 0)
+  ? fetchAssets(userId).then(data => setAssets(data)).catch(() => setAssets([]))
+  : Promise.resolve(setAssets(local))
+
+// Analytics.tsx useEffect — 올바른 패턴
+const local = loadLocalAssets()
+const loadAssetsAsync = (userId && local.length === 0)
+  ? fetchAssets(userId).catch(() => [] as Asset[])
+  : Promise.resolve(local)
+```
+
+### loadLocalAssets v1→v2 마이그레이션
+Portfolio · Analytics · RiskCenter 세 곳 모두 구버전(단일 `quantity`/`avgBuyPrice` 필드) 처리:
+```typescript
+if (!Array.isArray(a.entries)) {
+  // v1 → entries 배열로 복원
+  return { ...a, entries: [{ quantity: a.quantity, price: a.avgBuyPrice, ... }], sells: [] }
+}
+```
 
 ---
 
@@ -507,6 +575,8 @@ chat_anon boolean NOT NULL DEFAULT false
 12. **익명 채팅 DB**: `messages.user_id` nullable, `guest_session_id` 컬럼 추가. Supabase 타입 자동생성과 불일치하므로 insert 시 `as never` 캐스팅 사용
 13. **보호 페이지**: `portfolio` + `risk-center` + `analytics` 모두 로그인 필수. `setAuthRedirectTo(page)` 로 로그인 후 원래 페이지로 자동 이동
 14. **fundamentalsCache sector 보존**: `refreshFundamentals` upsert 시 `...(f.sector != null ? { sector: f.sector } : {})` 조건부 스프레드 — FMP가 sector=null 반환해도 DB 기존값 보호. 상태 머지도 동일하게 `f.sector ?? existing?.sector ?? null`
+15. **MoneyTip 사용 원칙**: JSX에서 금액을 직접 렌더하는 곳은 `<MoneyTip value={v} currency={c} />`로 교체. template literal 문자열 컨텍스트(경고 메시지 등)에서는 로컬 `fmtW` / `fmtD` / `fmtMoney` 함수를 그대로 사용. 두 방식의 K/M/B 로직은 동일하게 유지.
+16. **자산 데이터 소스 우선순위**: RiskCenter·Analytics는 localStorage 우선, DB는 localStorage가 비어있을 때만 폴백. DB `rowToAsset()`은 entries/sells를 손실하므로 localStorage가 있을 때 DB를 읽으면 포트폴리오와 수치가 달라진다.
 
 ---
 

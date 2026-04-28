@@ -165,7 +165,7 @@ function AnalyticsSeedCard({ seed, krwRate, krwInvested, usdInvested, krwCash, u
         <span className="text-sm font-semibold text-gray-200">시드머니 현황</span>
         {seedKRW > 0 && <span className="ml-auto text-[10px] text-gray-600">통합 <MoneyTip value={seedKRW} currency="KRW" /></span>}
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {seed.krw > 0 && (
           <div className="rounded-xl border border-gray-700 px-4 py-3 space-y-2">
             <div className="flex items-center gap-1.5">
@@ -230,7 +230,7 @@ function AnalyticsSeedCard({ seed, krwRate, krwInvested, usdInvested, krwCash, u
 
 // ── SectorRadarSection ─────────────────────────────────────
 
-function SectorRadarSection({
+const SectorRadarSection = React.memo(function SectorRadarSection({
   fundamentals, treemapItems, activeFilter, onFilter,
 }: {
   fundamentals: Map<string, Fundamentals>
@@ -238,13 +238,17 @@ function SectorRadarSection({
   activeFilter: string | null
   onFilter: (sector: string | null) => void
 }) {
-  const sectorMap = new Map<string, number>()
-  for (const item of treemapItems) {
-    if (!item.ticker) continue
-    const sector = fundamentals.get(item.ticker)?.sector
-    if (!sector) continue
-    sectorMap.set(sector, (sectorMap.get(sector) ?? 0) + item.krwValue)
-  }
+  const sectorMap = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const item of treemapItems) {
+      if (!item.ticker) continue
+      const sector = fundamentals.get(item.ticker)?.sector
+      if (!sector) continue
+      map.set(sector, (map.get(sector) ?? 0) + item.krwValue)
+    }
+    return map
+  }, [fundamentals, treemapItems])
+
   if (sectorMap.size === 0) return null
 
   const total = Array.from(sectorMap.values()).reduce((s, v) => s + v, 0)
@@ -338,7 +342,7 @@ function SectorRadarSection({
       </div>
     </div>
   )
-}
+})
 
 // ── DividendSection ────────────────────────────────────────
 
@@ -441,7 +445,7 @@ function getPlTextFill(plPct: number | null | undefined): string {
 
 interface TooltipState { item: TreemapItem; x: number; y: number }
 
-function TreemapSection({ items }: { items: TreemapItem[] }) {
+const TreemapSection = React.memo(function TreemapSection({ items }: { items: TreemapItem[] }) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const setTooltipRef = useRef(setTooltip)
   setTooltipRef.current = setTooltip
@@ -524,7 +528,7 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
   return (
     <div className="card relative">
       <p className="text-sm font-semibold text-gray-200 mb-3">종목별 비중</p>
-      <div style={{ width: '100%', height: 228 }}>
+      <div className="h-[190px] sm:h-[228px]" style={{ width: '100%' }}>
         <ResponsiveContainer width="100%" height="100%">
           <Treemap
             data={data}
@@ -598,7 +602,7 @@ function TreemapSection({ items }: { items: TreemapItem[] }) {
       )}
     </div>
   )
-}
+})
 
 // ── StackedBarAllocation ───────────────────────────────────
 
@@ -1154,15 +1158,25 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
 
   // ── Derived data ───────────────────────────────────────────
 
-  function toKrw(asset: Asset): number {
-    const cost = holdingCost(asset)
-    return MARKET[asset.market].currency === 'KRW' ? cost : cost * krwRate
-  }
-
-  const totalKrw = assets.reduce((s, a) => s + toKrw(a), 0)
-
-  const krwInvested = assets.reduce((s, a) => MARKET[a.market].currency === 'KRW' ? s + holdingCost(a) : s, 0)
-  const usdInvested = assets.reduce((s, a) => MARKET[a.market].currency === 'USD' ? s + holdingCost(a) : s, 0)
+  const { totalKrw, krwInvested, usdInvested, byMarket } = useMemo(() => {
+    function toKrwCost(asset: Asset): number {
+      const cost = holdingCost(asset)
+      return MARKET[asset.market].currency === 'KRW' ? cost : cost * krwRate
+    }
+    const totalKrw    = assets.reduce((s, a) => s + toKrwCost(a), 0)
+    const krwInvested = assets.reduce((s, a) => MARKET[a.market].currency === 'KRW' ? s + holdingCost(a) : s, 0)
+    const usdInvested = assets.reduce((s, a) => MARKET[a.market].currency === 'USD' ? s + holdingCost(a) : s, 0)
+    const byMarket = (['K-Stock', 'U-Stock', 'Crypto', 'Cash'] as MarketType[]).map(m => {
+      const group = assets.filter(a => a.market === m)
+      return {
+        market: m,
+        krw:    group.reduce((s, a) => s + toKrwCost(a), 0),
+        pl:     group.reduce((s, a) => s + totalRealizedPL(a), 0),
+        count:  group.length,
+      }
+    }).filter(g => g.krw > 0)
+    return { totalKrw, krwInvested, usdInvested, byMarket }
+  }, [assets, krwRate])
 
   // ── 트리맵 데이터 ─────────────────────────────────────────
   const treemapItems = useMemo((): TreemapItem[] => {
@@ -1194,16 +1208,6 @@ export default function Analytics({ userId, seed }: { userId: string | null; see
   const krwSeedCash = seed.krw > 0 ? Math.max(0, seed.krw - krwInvested) : 0
   const usdSeedCash = seed.usd > 0 ? Math.max(0, seed.usd - usdInvested) : 0
   const seedKRW     = seed.krw + seed.usd * krwRate
-
-  const byMarket = (['K-Stock', 'U-Stock', 'Crypto', 'Cash'] as MarketType[]).map(m => {
-    const group = assets.filter(a => a.market === m)
-    return {
-      market: m,
-      krw:    group.reduce((s, a) => s + toKrw(a), 0),
-      pl:     group.reduce((s, a) => s + totalRealizedPL(a), 0),
-      count:  group.length,
-    }
-  }).filter(g => g.krw > 0)
 
   const totalPL  = assets.reduce((s, a) => s + totalRealizedPL(a), 0)
   const totalInv = assets.reduce((s, a) => s + totalInvested(a), 0)

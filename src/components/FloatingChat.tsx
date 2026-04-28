@@ -76,6 +76,13 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
 }
 
+// UUID → "익명의병아리NNNN" (브라우저 세션마다 고정된 4자리 번호)
+function anonNameFromId(id: string): string {
+  const hex = id.replace(/-/g, '').slice(0, 6)
+  const num = (parseInt(hex, 16) % 9000) + 1000
+  return `익명의병아리${num}`
+}
+
 export default function FloatingChat({ user, userName, theme, userAvatar, avatarColor, chatSettings }: Props) {
   const [isOpen,       setIsOpen]       = useState(false)
   const [messages,     setMessages]     = useState<ChatMessage[]>([])
@@ -113,8 +120,16 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
     return id
   }, [user])
 
-  // userName 변경 시 ref 동기화 (presence 재연결 없이 최신 닉네임 유지)
-  useEffect(() => { userNameRef.current = userName }, [userName])
+  // 익명 채팅 표시명 — "익명의병아리NNNN" (브라우저마다 고정)
+  const anonName = useMemo<string | null>(() => {
+    if (!guestSessionId) return null
+    return anonNameFromId(guestSessionId)
+  }, [guestSessionId])
+
+  // 현재 사용자 표시명 — ref로 presence에서 재연결 없이 최신 유지
+  useEffect(() => {
+    userNameRef.current = user ? (userName || '익명') : (anonName || '익명')
+  }, [user, userName, anonName])
 
   // 접속자 목록 외부 클릭 시 닫기
   useEffect(() => {
@@ -224,7 +239,7 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
 
   // ── Presence — 실시간 접속자 수 ────────────────────────────────
   useEffect(() => {
-    const presenceKey = user?.id ?? `anon_${Math.random().toString(36).slice(2)}`
+    const presenceKey = user?.id ?? guestSessionId ?? `anon_${Math.random().toString(36).slice(2)}`
     const ch = supabase.channel('presence:financy-lobby', {
       config: { presence: { key: presenceKey } },
     })
@@ -268,11 +283,11 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
     setLoading(true)
     supabase
       .from('messages')
-      .select('id, user_id, user_name, content, created_at')
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(300)
       .then(({ data }) => {
-        setMessages(data ? ([...data].reverse() as ChatMessage[]) : [])
+        setMessages(data ? ([...data].reverse() as unknown as ChatMessage[]) : [])
         setLoading(false)
         setTimeout(() => scrollToBottom('auto'), 60)
       })
@@ -320,7 +335,7 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
       await (supabase.from('messages') as ReturnType<typeof supabase.from>).insert({
         user_id:          null,
         guest_session_id: guestSessionId,
-        user_name:        userName || '익명',
+        user_name:        anonName || '익명',
         content,
       } as never)
     }
@@ -482,10 +497,10 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
                     <div className="relative">
                       <div
                         className={`px-3 py-2 text-sm leading-relaxed break-words ${
-                          isOwn ? 'rounded-2xl rounded-tr-sm text-white' : 'rounded-2xl rounded-tl-sm'
+                          isOwn ? 'rounded-2xl rounded-tr-sm' : 'rounded-2xl rounded-tl-sm'
                         } ${!isOwn && (isLight ? 'text-gray-800' : 'text-gray-200')}`}
                         style={isOwn
-                          ? { background: 'linear-gradient(135deg, #6C63FF 0%, #8B84FF 100%)' }
+                          ? { background: 'linear-gradient(135deg, #6C63FF 0%, #8B84FF 100%)', color: '#fff' }
                           : otherBubbleStyle}
                       >
                         {msg.content}
@@ -530,7 +545,7 @@ export default function FloatingChat({ user, userName, theme, userAvatar, avatar
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder={user ? '메시지를 입력하세요…' : `익명으로 채팅 (${userName || '익명'})`}
+              placeholder={user ? '메시지를 입력하세요…' : `${anonName || '익명'}으로 채팅 중`}
               maxLength={500}
               style={inputStyle}
               onFocus={e => (e.currentTarget.style.borderColor = isLight ? 'rgba(91,85,204,0.35)' : 'rgba(108,99,255,0.35)')}

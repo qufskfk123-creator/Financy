@@ -59,6 +59,18 @@
   --ticker-name:       #6b7280;
   --ticker-price:      #9ca3af;
   --ticker-sep:        #374151;
+  /* Weather stage active backgrounds (dark) */
+  --weather-0-activebg:   linear-gradient(135deg, rgba(30,58,138,0.90), rgba(23,37,84,0.95));
+  --weather-1-activebg:   linear-gradient(135deg, rgba(76,29,149,0.88), rgba(49,46,129,0.93));
+  --weather-2-activebg:   linear-gradient(135deg, rgba(72,56,0,0.92), rgba(100,78,0,0.96));
+  --weather-3-activebg:   linear-gradient(135deg, rgba(6,78,59,0.88), rgba(4,120,87,0.93));
+  --weather-4-activebg:   linear-gradient(135deg, rgba(127,29,29,0.90), rgba(153,27,27,0.95));
+  /* Weather stage icon colors (dark) */
+  --weather-0-iconcolor:  #93c5fd;
+  --weather-1-iconcolor:  #c4b5fd;
+  --weather-2-iconcolor:  #fde68a;
+  --weather-3-iconcolor:  #6ee7b7;
+  --weather-4-iconcolor:  #fca5a5;
 }
 
 [data-theme="light"] {
@@ -108,6 +120,18 @@
   --ticker-name:       #6b7280;
   --ticker-price:      #374151;
   --ticker-sep:        #d1d5db;
+  /* Weather stage active backgrounds (light) */
+  --weather-0-activebg:   linear-gradient(135deg, rgba(219,234,254,0.92), rgba(191,219,254,0.96));
+  --weather-1-activebg:   linear-gradient(135deg, rgba(237,233,254,0.90), rgba(221,214,254,0.94));
+  --weather-2-activebg:   linear-gradient(135deg, rgba(254,252,232,0.92), rgba(254,249,195,0.96));
+  --weather-3-activebg:   linear-gradient(135deg, rgba(209,250,229,0.90), rgba(167,243,208,0.94));
+  --weather-4-activebg:   linear-gradient(135deg, rgba(254,226,226,0.92), rgba(252,165,165,0.94));
+  /* Weather stage icon colors (light — darker for readability) */
+  --weather-0-iconcolor:  #1d4ed8;
+  --weather-1-iconcolor:  #6d28d9;
+  --weather-2-iconcolor:  #b45309;
+  --weather-3-iconcolor:  #047857;
+  --weather-4-iconcolor:  #b91c1c;
 }
 
 /* ── Base ──────────────────────────────────────────────────── */
