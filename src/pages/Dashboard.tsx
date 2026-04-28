@@ -395,6 +395,124 @@ function parseNum(s: string | null): number | null {
   return isNaN(n) ? null : n
 }
 
+// ── 경제지표 한국어 번역 ─────────────────────────────────────
+
+// 긴 구문이 먼저 매칭되도록 length 내림차순 정렬
+const ECON_NAME_MAP: [string, string][] = ([
+  // 고용
+  ['Nonfarm Payrolls',                     '비농업 고용'],
+  ['Non-Farm Payrolls',                    '비농업 고용'],
+  ['ADP Employment Change',                'ADP 고용변화'],
+  ['Initial Jobless Claims',               '신규 실업급여'],
+  ['Continuing Jobless Claims',            '연속 실업급여'],
+  ['Unemployment Rate',                    '실업률'],
+  ['JOLTS Job Openings',                   'JOLTS 구인건수'],
+  ['Average Hourly Earnings',              '평균 시간당 임금'],
+  ['Nonfarm Productivity',                 '비농업 생산성'],
+  ['Unit Labor Costs',                     '단위 노동비용'],
+  // 물가
+  ['Core CPI',                             '근원 소비자물가'],
+  ['Core PPI',                             '근원 생산자물가'],
+  ['Core PCE',                             '근원 PCE'],
+  ['Consumer Price Index',                 '소비자물가지수'],
+  ['Producer Price Index',                 '생산자물가지수'],
+  ['PCE Price Index',                      'PCE 물가지수'],
+  ['Personal Consumption Expenditures Price', 'PCE 물가'],
+  ['Import Prices',                        '수입물가'],
+  ['Export Prices',                        '수출물가'],
+  // GDP / 성장
+  ['GDP',                                  'GDP 성장률'],
+  // 금리 / 통화
+  ['Fed Interest Rate Decision',           '기준금리 결정'],
+  ['Federal Funds Rate',                   '기준금리'],
+  ['FOMC Statement',                       'FOMC 성명'],
+  ['FOMC',                                 'FOMC'],
+  // 소비 / 심리
+  ['CB Consumer Confidence',               'CB 소비자신뢰'],
+  ['Michigan Consumer Sentiment',          '미시건 소비자심리'],
+  ['Consumer Sentiment',                   '소비자심리지수'],
+  ['Retail Sales',                         '소매판매'],
+  ['Personal Income',                      '개인소득'],
+  ['Personal Spending',                    '개인소비'],
+  // 제조 / 서비스
+  ['S&P Flash US Manufacturing PMI',       'S&P 제조업 PMI(속보)'],
+  ['S&P Flash US Services PMI',            'S&P 서비스업 PMI(속보)'],
+  ['S&P Global Manufacturing PMI',         'S&P 제조업 PMI'],
+  ['S&P Global Services PMI',              'S&P 서비스업 PMI'],
+  ['ISM Manufacturing PMI',                'ISM 제조업 PMI'],
+  ['ISM Non-Manufacturing PMI',            'ISM 서비스업 PMI'],
+  ['ISM Services PMI',                     'ISM 서비스업 PMI'],
+  ['Empire State Manufacturing',           '뉴욕 제조업지수'],
+  ['Philadelphia Fed Manufacturing',       '필라델피아 제조업'],
+  ['Dallas Fed Manufacturing',             '댈러스 제조업'],
+  ['Chicago PMI',                          '시카고 PMI'],
+  ['Industrial Production',               '산업생산'],
+  ['Capacity Utilization',                 '설비가동률'],
+  ['Durable Goods Orders',                 '내구재주문'],
+  ['Factory Orders',                       '공장수주'],
+  ['Wholesale Inventories',               '도매재고'],
+  // 주택
+  ['S&P/Case-Shiller Home Price',          '케이스-쉴러 주택가격'],
+  ['House Price Index',                    '주택가격지수'],
+  ['Building Permits',                     '건축허가'],
+  ['Housing Starts',                       '주택착공'],
+  ['Pending Home Sales',                   '잠정주택판매'],
+  ['Existing Home Sales',                  '기존주택판매'],
+  ['New Home Sales',                       '신규주택판매'],
+  // 무역
+  ['Trade Balance',                        '무역수지'],
+  ['Current Account',                      '경상수지'],
+  // 에너지
+  ['API Crude Oil Stock Change',           '원유재고변화(API)'],
+  ['EIA Crude Oil Inventories',            '원유재고(EIA)'],
+  ['Crude Oil Inventories',               '원유재고'],
+  // 기타
+  ['CB Leading Index',                     'CB 선행지수'],
+  ['Redbook',                              '레드북 소매'],
+] as [string, string][]).sort((a, b) => b[0].length - a[0].length)
+
+const SUFFIX_MAP: [RegExp, string][] = [
+  [/\bYoY\b/gi,           '전년 대비'],
+  [/\bMoM\b/gi,           '전월 대비'],
+  [/\bQoQ\b/gi,           '전분기 대비'],
+  [/\bWeekly\b/gi,        '주간'],
+  [/\bMonthly\b/gi,       '월간'],
+  [/\bAnnual\b/gi,        '연간'],
+  [/\bAdvance\b/gi,       '속보'],
+  [/\bFlash\b/gi,         '속보'],
+  [/\bPreliminary\b/gi,   '예비치'],
+  [/\bPrelim\b/gi,        '예비치'],
+  [/\bRevised\b/gi,       '수정치'],
+  [/\bFinal\b/gi,         '확정치'],
+  [/\b2nd Estimate\b/gi,  '2차 추정치'],
+  [/\b3rd Estimate\b/gi,  '3차 추정치'],
+]
+
+function translateEconEvent(name: string): string {
+  let result = name
+
+  // 1. 핵심 지표명 번역 (긴 구문 우선)
+  for (const [en, ko] of ECON_NAME_MAP) {
+    const escaped = en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(escaped, 'i').test(result)) {
+      result = result.replace(new RegExp(escaped, 'i'), ko)
+      break
+    }
+  }
+
+  // 2. 접미사 번역
+  for (const [pattern, ko] of SUFFIX_MAP) {
+    result = result.replace(pattern, ko)
+  }
+
+  // 3. 미매핑 지표가 너무 길면 생략
+  if (result === name && result.length > 24) {
+    result = result.slice(0, 24) + '…'
+  }
+
+  return result.trim()
+}
+
 // ── 오늘의 투자 기상 특보 ────────────────────────────────
 
 function getCountdown(dateStr: string, now: Date): string | null {
@@ -424,8 +542,7 @@ function buildForecast(todayEvents: EconEvent[]): string {
     const rawT  = ev.date.includes(' ') ? ev.date.split(' ')[1] : ''
     const time  = /^\d{2}:\d{2}/.test(rawT) ? rawT.slice(0, 5) : ''
     const flag  = COUNTRY_FLAG[ev.country] ?? ''
-    const rawName = ev.event.replace(/^\d{4}-\d{2}-\d{2}\s+/, '')
-    const name  = rawName.length > 30 ? rawName.slice(0, 30) + '…' : rawName
+    const name  = translateEconEvent(ev.event.replace(/^\d{4}-\d{2}-\d{2}\s+/, ''))
     const extra = highUpcoming.length > 1 ? ` 외 ${highUpcoming.length - 1}건` : ''
     return `${flag} 오늘 ${time} UTC — ${name}${extra} 발표 예정. 시장 온도 급변 가능성 높습니다.`
   }
@@ -535,7 +652,7 @@ function TodayEconAlert({ events, loading, error }: {
             const rawT      = ev.date.includes(' ') ? ev.date.split(' ')[1] : ''
             const time      = /^\d{2}:\d{2}/.test(rawT) ? rawT.slice(0, 5) : ''
             const flag      = COUNTRY_FLAG[ev.country] ?? ev.country
-            const eventName = ev.event.replace(/^\d{4}-\d{2}-\d{2}\s+/, '')
+            const eventName = translateEconEvent(ev.event.replace(/^\d{4}-\d{2}-\d{2}\s+/, ''))
             const countdown = getCountdown(ev.date, now)
             const hasActual = ev.actual != null && ev.actual !== ''
             const isPast    = countdown === null
