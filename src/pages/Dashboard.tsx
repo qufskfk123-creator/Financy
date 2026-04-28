@@ -395,6 +395,24 @@ function parseNum(s: string | null): number | null {
   return isNaN(n) ? null : n
 }
 
+// UTC 날짜 문자열 "YYYY-MM-DD HH:MM:SS" → 미국 동부 시간 "HH:MM" (DST 자동 처리)
+function utcToET(dateStr: string): string {
+  if (!dateStr.includes(' ')) return ''
+  const rawT = dateStr.split(' ')[1]
+  if (!/^\d{2}:\d{2}/.test(rawT)) return ''
+  try {
+    const [y, mo, d] = dateStr.split(' ')[0].split('-').map(Number)
+    const [h, m]     = rawT.slice(0, 5).split(':').map(Number)
+    const utc = new Date(Date.UTC(y, mo - 1, d, h, m))
+    return utc.toLocaleTimeString('en-US', {
+      timeZone:  'America/New_York',
+      hour:      '2-digit',
+      minute:    '2-digit',
+      hour12:    false,
+    })
+  } catch { return '' }
+}
+
 // ── 경제지표 한국어 번역 ─────────────────────────────────────
 
 // 긴 구문이 먼저 매칭되도록 length 내림차순 정렬
@@ -539,12 +557,12 @@ function buildForecast(todayEvents: EconEvent[]): string {
   const highUpcoming = upcoming.filter(ev => ev.impact === 'High')
   if (highUpcoming.length > 0) {
     const ev    = highUpcoming[0]
-    const rawT  = ev.date.includes(' ') ? ev.date.split(' ')[1] : ''
-    const time  = /^\d{2}:\d{2}/.test(rawT) ? rawT.slice(0, 5) : ''
+    const time  = utcToET(ev.date)
     const flag  = COUNTRY_FLAG[ev.country] ?? ''
     const name  = translateEconEvent(ev.event.replace(/^\d{4}-\d{2}-\d{2}\s+/, ''))
     const extra = highUpcoming.length > 1 ? ` 외 ${highUpcoming.length - 1}건` : ''
-    return `${flag} 오늘 ${time} UTC — ${name}${extra} 발표 예정. 시장 온도 급변 가능성 높습니다.`
+    const timePart = time ? `${time} ET ` : ''
+    return `${flag} 오늘 ${timePart}— ${name}${extra} 발표 예정. 시장 온도 급변 가능성 높습니다.`
   }
   if (upcoming.length > 0)
     return `오늘 예정된 지표 ${upcoming.length}건 — 주요 발표 전 포지션을 점검하세요.`
@@ -649,8 +667,7 @@ function TodayEconAlert({ events, loading, error }: {
         </div>
         <div className="divide-y divide-gray-800/50">
           {todayEvents.map((ev, i) => {
-            const rawT      = ev.date.includes(' ') ? ev.date.split(' ')[1] : ''
-            const time      = /^\d{2}:\d{2}/.test(rawT) ? rawT.slice(0, 5) : ''
+            const time      = utcToET(ev.date)
             const flag      = COUNTRY_FLAG[ev.country] ?? ev.country
             const eventName = translateEconEvent(ev.event.replace(/^\d{4}-\d{2}-\d{2}\s+/, ''))
             const countdown = getCountdown(ev.date, now)
@@ -664,13 +681,8 @@ function TodayEconAlert({ events, loading, error }: {
 
             return (
               <div key={i} className="py-2.5 first:pt-0 last:pb-0">
-                {/* 상단 행: 시간 · 국가 · 중요도 · 이벤트명 · 상태 배지 */}
+                {/* 상단 행: 국가 · 중요도 · 이벤트명 · 상태 배지 */}
                 <div className="flex items-center gap-1.5 min-w-0">
-                  {time && (
-                    <span className="mono text-[11px] font-bold text-slate-500 flex-shrink-0 w-[38px]">
-                      {time}
-                    </span>
-                  )}
                   <span className="text-[11px] flex-shrink-0">{flag}</span>
                   <ImpactFlames impact={ev.impact} />
                   <span className="text-xs text-slate-200 font-medium flex-1 min-w-0 break-keep">
@@ -703,9 +715,14 @@ function TodayEconAlert({ events, loading, error }: {
                   )}
                 </div>
 
-                {/* 하단 행: 이전 / 예상 / 실제 */}
-                {(ev.previous || ev.estimate || ev.actual) && (
-                  <div className="flex items-center gap-3 mt-1 pl-[46px]">
+                {/* 하단 행: 시간 · 이전 / 예상 / 실제 */}
+                {(time || ev.previous || ev.estimate || ev.actual) && (
+                  <div className="flex items-center gap-3 mt-1 pl-4">
+                    {time && (
+                      <span className="mono text-[10px] font-bold text-slate-600 flex-shrink-0">
+                        {time} ET
+                      </span>
+                    )}
                     {ev.previous && (
                       <span className="text-[10px] text-slate-700">
                         이전 <span className="text-slate-500 mono">{ev.previous}</span>
